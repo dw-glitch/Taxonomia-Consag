@@ -3,138 +3,1104 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#0b1739" />
-  <title>Taxonomia Consag</title>
+  <meta name="theme-color" content="#0B2447" />
+  <title>Taxonomia Consag v1.3 · GRCON</title>
   <link rel="icon" href="https://raw.githubusercontent.com/dw-glitch/GRCON/main/grcon-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="logo-shell">
-        <img class="logo" src="https://raw.githubusercontent.com/dw-glitch/GRCON/main/grcon-logo-app.png" alt="GRCON" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'" />
-        <div class="logo-fallback">GR</div>
+
+  <!-- ═══════════════════════════════════════════
+       SIDEBAR
+  ═══════════════════════════════════════════ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo-wrap">
+        <img class="sidebar-logo" src="https://raw.githubusercontent.com/dw-glitch/GRCON/main/grcon-logo-app.png"
+          alt="GRCON" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
+        <div class="sidebar-logo-fallback">GR</div>
       </div>
-      <div>
-        <div class="eyebrow">GRCON · CONTROLE DOCUMENTAL</div>
-        <h1>Taxonomia Consag</h1>
+      <div class="sidebar-brand-text">
+        <div class="sidebar-brand-name">GRCON</div>
+        <div class="sidebar-brand-sub">Controle Documental</div>
+      </div>
+      <button class="sidebar-toggle" id="sidebarToggle" title="Recolher menu" aria-label="Recolher menu">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </button>
+    </div>
+
+    <nav class="sidebar-nav" role="navigation" aria-label="Menu principal">
+      <button class="nav-item active" data-view="dashboard" title="Dashboard">
+        <span class="nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>
+          </svg>
+        </span>
+        <span class="nav-label">Dashboard</span>
+      </button>
+      <button class="nav-item" data-view="base" title="Base CONSAG">
+        <span class="nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+          </svg>
+        </span>
+        <span class="nav-label">Base CONSAG</span>
+      </button>
+      <button class="nav-item" data-view="lds" title="LDs">
+        <span class="nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+          </svg>
+        </span>
+        <span class="nav-label">LDs</span>
+        <span class="nav-badge" id="navBadgeLDs" style="display:none"></span>
+      </button>
+      <button class="nav-item" data-view="analise" title="Análise">
+        <span class="nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </span>
+        <span class="nav-label">Análise</span>
+      </button>
+      <button class="nav-item" data-view="sugestoes" title="Sugestões">
+        <span class="nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+        </span>
+        <span class="nav-label">Sugestões</span>
+        <span class="nav-badge" id="navBadgeSugestoes" style="display:none"></span>
+      </button>
+      <button class="nav-item" data-view="relatorios" title="Relatórios">
+        <span class="nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </span>
+        <span class="nav-label">Relatórios</span>
+      </button>
+
+      <div class="sidebar-divider"></div>
+
+      <button class="nav-item" data-view="configuracoes" title="Configurações">
+        <span class="nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+            <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          </svg>
+        </span>
+        <span class="nav-label">Configurações</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-version">v1.3</div>
+    </div>
+  </aside>
+
+  <!-- ═══════════════════════════════════════════
+       APP SHELL
+  ═══════════════════════════════════════════ -->
+  <div class="app-shell" id="appShell">
+
+    <!-- TOPBAR -->
+    <header class="topbar" role="banner">
+      <div class="topbar-left">
+        <div class="topbar-title">
+          <span class="topbar-system">Taxonomia Consag</span>
+          <span class="topbar-version-tag">v1.3</span>
+        </div>
+        <div class="topbar-breadcrumb" id="topbarBreadcrumb">Dashboard</div>
+      </div>
+      <div class="topbar-center">
+        <div class="base-indicator" id="baseIndicator">
+          <span class="base-indicator-dot active"></span>
+          <span class="base-indicator-text" id="baseIndicatorText">Base incorporada ativa</span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-local-badge">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          Processamento local
+        </div>
+        <div class="topbar-user">
+          <div class="user-avatar">GR</div>
+          <span class="user-name">Usuário</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ───────── MAIN CONTENT ───────── -->
+    <main class="view-container" id="viewContainer">
+
+      <!-- ══════════════════════════════
+           VIEW: DASHBOARD
+      ══════════════════════════════ -->
+      <section class="view" id="view-dashboard">
+        <div class="view-header">
+          <div>
+            <h2 class="view-title">Dashboard</h2>
+            <p class="view-subtitle">Visão executiva do processamento de taxonomias</p>
+          </div>
+          <div class="view-actions">
+            <button class="btn btn-primary" onclick="document.querySelector('[data-view=analise]').click()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              Nova Análise
+            </button>
+          </div>
+        </div>
+
+        <!-- KPI CARDS -->
+        <div class="kpi-grid" id="kpiGrid">
+          <div class="kpi-card">
+            <div class="kpi-icon kpi-icon--blue">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+            </div>
+            <div class="kpi-body">
+              <div class="kpi-value" id="kpiTotal">—</div>
+              <div class="kpi-label">Total de Documentos</div>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon kpi-icon--indigo">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+            </div>
+            <div class="kpi-body">
+              <div class="kpi-value" id="kpiAnalisados">—</div>
+              <div class="kpi-label">Analisados</div>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon kpi-icon--green">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+            </div>
+            <div class="kpi-body">
+              <div class="kpi-value" id="kpiPreenchidas">—</div>
+              <div class="kpi-label">Taxonomias Preenchidas</div>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon kpi-icon--yellow">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </div>
+            <div class="kpi-body">
+              <div class="kpi-value" id="kpiBranco">—</div>
+              <div class="kpi-label">Taxonomias em Branco</div>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon kpi-icon--green">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </div>
+            <div class="kpi-body">
+              <div class="kpi-value" id="kpiAprovadas">—</div>
+              <div class="kpi-label">Sugestões Aprovadas</div>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon kpi-icon--red">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+            </div>
+            <div class="kpi-body">
+              <div class="kpi-value" id="kpiPendencias">—</div>
+              <div class="kpi-label">Pendências</div>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon kpi-icon--blue">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+                <line x1="6" y1="20" x2="6" y2="14"/>
+              </svg>
+            </div>
+            <div class="kpi-body">
+              <div class="kpi-value" id="kpiAcuracia">—</div>
+              <div class="kpi-label">Acurácia Média</div>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon kpi-icon--indigo">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            </div>
+            <div class="kpi-body">
+              <div class="kpi-value" id="kpiConfianca">—</div>
+              <div class="kpi-label">Confiança Média</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CHARTS ROW -->
+        <div class="charts-grid">
+          <div class="card chart-card">
+            <div class="card-header">
+              <h3 class="card-title">Distribuição de Confiança</h3>
+              <span class="card-badge" id="chartConfBadge"></span>
+            </div>
+            <div class="chart-container">
+              <canvas id="chartConfianca" height="220"></canvas>
+              <div class="chart-empty-state" id="chartConfEmpty">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".3">
+                  <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+                  <line x1="6" y1="20" x2="6" y2="14"/>
+                </svg>
+                <p>Execute uma análise para visualizar os dados</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card chart-card">
+            <div class="card-header">
+              <h3 class="card-title">Status das Taxonomias</h3>
+              <span class="card-badge" id="chartStatusBadge"></span>
+            </div>
+            <div class="chart-container chart-donut-container">
+              <canvas id="chartStatus" height="220"></canvas>
+              <div class="chart-empty-state" id="chartStatusEmpty">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".3">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 8v4l3 3"/>
+                </svg>
+                <p>Execute uma análise para visualizar os dados</p>
+              </div>
+              <div class="donut-legend" id="donutLegend" style="display:none"></div>
+            </div>
+          </div>
+
+          <div class="card chart-card">
+            <div class="card-header">
+              <h3 class="card-title">Resumo da Base</h3>
+            </div>
+            <div class="base-summary-grid">
+              <div class="base-stat-item">
+                <div class="base-stat-value" id="statTypes">—</div>
+                <div class="base-stat-label">Tipos Documentais</div>
+              </div>
+              <div class="base-stat-item">
+                <div class="base-stat-value" id="statExamples">—</div>
+                <div class="base-stat-label">Taxonomias de Referência</div>
+              </div>
+              <div class="base-stat-item">
+                <div class="base-stat-value" id="statRefs">—</div>
+                <div class="base-stat-label">Documentos Indexados</div>
+              </div>
+              <div class="base-stat-item">
+                <div class="base-stat-value" id="kpiLdsCarregadas">0</div>
+                <div class="base-stat-label">LDs Carregadas</div>
+              </div>
+            </div>
+            <div class="base-cta">
+              <button class="btn btn-outline btn-sm" onclick="document.querySelector('[data-view=base]').click()">
+                Ver detalhes da base
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- WELCOME STATE (shown when no results) -->
+        <div class="welcome-card" id="welcomeCard">
+          <div class="welcome-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+          </div>
+          <h3>Bem-vindo ao Taxonomia CONSAG</h3>
+          <p>Comece carregando suas LDs de trabalho ou cole códigos de documentos para análise.</p>
+          <div class="welcome-steps">
+            <div class="welcome-step">
+              <span class="step-num">1</span>
+              <span>Carregar LDs</span>
+            </div>
+            <div class="welcome-arrow">→</div>
+            <div class="welcome-step">
+              <span class="step-num">2</span>
+              <span>Detectar em branco</span>
+            </div>
+            <div class="welcome-arrow">→</div>
+            <div class="welcome-step">
+              <span class="step-num">3</span>
+              <span>Analisar & Sugerir</span>
+            </div>
+            <div class="welcome-arrow">→</div>
+            <div class="welcome-step">
+              <span class="step-num">4</span>
+              <span>Exportar Relatório</span>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-lg" onclick="document.querySelector('[data-view=lds]').click()">
+            Começar — Carregar LDs
+          </button>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════════
+           VIEW: BASE CONSAG
+      ══════════════════════════════ -->
+      <section class="view hidden" id="view-base">
+        <div class="view-header">
+          <div>
+            <h2 class="view-title">Base CONSAG</h2>
+            <p class="view-subtitle">Gerenciamento da base oficial de classificação</p>
+          </div>
+        </div>
+
+        <div class="two-col-layout">
+          <div class="col-main">
+            <!-- Base Status Card -->
+            <div class="card status-card-base">
+              <div class="card-header">
+                <h3 class="card-title">Base de Classificação Ativa</h3>
+                <span class="badge badge-green" id="baseActiveBadge">Ativa</span>
+              </div>
+              <div id="baseStatus" class="base-status-content"></div>
+              <div class="base-info-grid" id="baseInfoGrid">
+                <div class="base-info-item">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                  <span id="baseInfoFile">CONSAG-PHC-ENG-DC-GERA-GES-PT-0001_19 1</span>
+                </div>
+              </div>
+              <div class="card-footer">
+                <label class="btn btn-outline">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+                    <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+                  </svg>
+                  Atualizar base CONSAG
+                  <input id="baseFile" type="file" accept=".xlsx,.xlsm" hidden />
+                </label>
+                <p class="hint-text">Se houver nova revisão da base, substitua aqui. A estrutura fica salva localmente no navegador.</p>
+              </div>
+            </div>
+
+            <!-- Conformidade -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">Painel de Conformidade</h3>
+              </div>
+              <div class="conformity-grid" id="conformityGrid">
+                <div class="conformity-item conformity-item--green">
+                  <div class="conformity-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                  </div>
+                  <div class="conformity-body">
+                    <div class="conformity-title">Conforme</div>
+                    <div class="conformity-desc">Taxonomia compatível com a base oficial e aprovada na matriz de tipo × setor.</div>
+                  </div>
+                </div>
+                <div class="conformity-item conformity-item--yellow">
+                  <div class="conformity-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                  </div>
+                  <div class="conformity-body">
+                    <div class="conformity-title">Necessita Revisão</div>
+                    <div class="conformity-desc">Sugestão gerada com base em padrões históricos, mas diverge da matriz oficial. Revisar antes de aplicar.</div>
+                  </div>
+                </div>
+                <div class="conformity-item conformity-item--red">
+                  <div class="conformity-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/>
+                      <line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>
+                  </div>
+                  <div class="conformity-body">
+                    <div class="conformity-title">Conflito com Base</div>
+                    <div class="conformity-desc">Tipo × setor não compatível com a matriz oficial. Verificar documentação de exceção.</div>
+                  </div>
+                </div>
+                <div class="conformity-item conformity-item--gray">
+                  <div class="conformity-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                  </div>
+                  <div class="conformity-body">
+                    <div class="conformity-title">Sem Evidências Suficientes</div>
+                    <div class="conformity-desc">Código não localizado nas LDs ou referências. Classificação manual obrigatória.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-side">
+            <!-- Stats Rápidas -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">Estatísticas da Base</h3>
+              </div>
+              <div class="stats-list">
+                <div class="stats-list-item">
+                  <span class="stats-list-label">Tipos Documentais</span>
+                  <span class="stats-list-value" id="baseSideStatTypes">—</span>
+                </div>
+                <div class="stats-list-item">
+                  <span class="stats-list-label">Taxonomias de Referência</span>
+                  <span class="stats-list-value" id="baseSideStatExamples">—</span>
+                </div>
+                <div class="stats-list-item">
+                  <span class="stats-list-label">Documentos Indexados</span>
+                  <span class="stats-list-value" id="baseSideStatRefs">—</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Referência do padrão -->
+            <div class="card card-info">
+              <div class="card-header">
+                <h3 class="card-title">Padrão de Taxonomia</h3>
+              </div>
+              <div class="taxonomy-pattern">
+                <div class="tax-pattern-row">
+                  <span class="tax-seg" style="--c:#146C94">OBRA</span>
+                  <span class="tax-sep">-</span>
+                  <span class="tax-seg" style="--c:#19376D">TIPO</span>
+                  <span class="tax-sep">-</span>
+                  <span class="tax-seg" style="--c:#0B2447">SETOR</span>
+                  <span class="tax-sep">-</span>
+                  <span class="tax-seg" style="--c:#146C94">ETAPA</span>
+                </div>
+                <div class="tax-pattern-row">
+                  <span class="tax-seg" style="--c:#19376D">FRENTE</span>
+                  <span class="tax-sep">-</span>
+                  <span class="tax-seg" style="--c:#0B2447">DISC.</span>
+                  <span class="tax-sep">-</span>
+                  <span class="tax-seg" style="--c:#146C94">IDIOMA</span>
+                  <span class="tax-sep">-</span>
+                  <span class="tax-seg" style="--c:#00A86B">0001</span>
+                </div>
+              </div>
+              <p class="hint-text mt-8">8 segmentos separados por hífen. O sequencial é gerado automaticamente sem reutilização.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════════
+           VIEW: LDs
+      ══════════════════════════════ -->
+      <section class="view hidden" id="view-lds">
+        <div class="view-header">
+          <div>
+            <h2 class="view-title">Listas de Documentos (LDs)</h2>
+            <p class="view-subtitle">Carregue as LDs para análise e preenchimento de taxonomias</p>
+          </div>
+        </div>
+
+        <div class="two-col-layout">
+          <div class="col-main">
+            <!-- Drop Zone -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title-with-step">
+                  <span class="step-pill">1</span>
+                  <h3 class="card-title">Carregar Listas de Documentos</h3>
+                </div>
+                <span class="format-tag">.xlsx / .xlsm</span>
+              </div>
+
+              <label id="ldDrop" class="dropzone" role="button" tabindex="0" aria-label="Área de upload de LDs">
+                <input id="ldFiles" type="file" accept=".xlsx,.xlsm" multiple hidden />
+                <div class="dropzone-content">
+                  <div class="dropzone-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+                      <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+                    </svg>
+                  </div>
+                  <strong class="dropzone-title">Arraste as LDs aqui</strong>
+                  <span class="dropzone-sub">ou <u>clique para selecionar</u> · .xlsx, .xlsm · múltiplos arquivos permitidos</span>
+                </div>
+                <div class="dropzone-drag-overlay">
+                  <div class="dropzone-drag-icon">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+                      <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+                    </svg>
+                  </div>
+                  <span>Solte os arquivos aqui</span>
+                </div>
+              </label>
+
+              <!-- File List -->
+              <div id="ldList" class="file-list-empty">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".4">
+                  <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+                  <polyline points="13 2 13 9 20 9"/>
+                </svg>
+                <p>Nenhuma LD carregada.<br>A análise funciona com as referências incorporadas.</p>
+              </div>
+            </div>
+
+            <!-- Blank Taxonomies -->
+            <div class="card card-action-highlight">
+              <div class="card-header">
+                <div class="card-title-with-step">
+                  <span class="step-pill">2</span>
+                  <h3 class="card-title">Detectar Taxonomias em Branco</h3>
+                </div>
+              </div>
+              <p class="card-desc">Analisa automaticamente todas as LDs carregadas e lista os documentos com a coluna Taxonomia vazia para processamento em lote.</p>
+              <button id="blankAnalyzeBtn" class="btn btn-accent btn-full" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                Detectar Taxonomias em Branco
+              </button>
+            </div>
+          </div>
+
+          <div class="col-side">
+            <!-- Tips -->
+            <div class="card card-info">
+              <div class="card-header">
+                <h3 class="card-title">Sobre as LDs</h3>
+              </div>
+              <div class="tips-list">
+                <div class="tip-item">
+                  <div class="tip-icon tip-icon--blue">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </div>
+                  <span>Múltiplos arquivos .xlsx e .xlsm são suportados</span>
+                </div>
+                <div class="tip-item">
+                  <div class="tip-icon tip-icon--blue">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </div>
+                  <span>O cabeçalho da coluna Taxonomia é detectado automaticamente</span>
+                </div>
+                <div class="tip-item">
+                  <div class="tip-icon tip-icon--blue">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </div>
+                  <span>Células com taxonomia existente são protegidas contra sobrescrita</span>
+                </div>
+                <div class="tip-item">
+                  <div class="tip-icon tip-icon--green">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  </div>
+                  <span>Processamento 100% local — nenhum arquivo sai do navegador</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Atalho para análise -->
+            <div class="card card-cta">
+              <h4>Ir para Análise</h4>
+              <p>Após carregar as LDs, prossiga para inserir códigos específicos ou use a detecção automática de taxonomias em branco.</p>
+              <button class="btn btn-primary btn-sm" onclick="document.querySelector('[data-view=analise]').click()">
+                Ir para Análise →
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════════
+           VIEW: ANÁLISE
+      ══════════════════════════════ -->
+      <section class="view hidden" id="view-analise">
+        <div class="view-header">
+          <div>
+            <h2 class="view-title">Análise de Documentos</h2>
+            <p class="view-subtitle">Cole os códigos de documentos para gerar sugestões de taxonomia</p>
+          </div>
+        </div>
+
+        <div class="two-col-layout">
+          <div class="col-main">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title-with-step">
+                  <span class="step-pill">3</span>
+                  <h3 class="card-title">Códigos para Analisar</h3>
+                </div>
+                <button id="clearCodes" class="btn btn-ghost btn-sm" type="button">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                  </svg>
+                  Limpar
+                </button>
+              </div>
+
+              <textarea id="codesInput" class="code-input" spellcheck="false"
+                placeholder="Cole um código por linha. Exemplo:&#10;LI-5290.00-22213-970-C1O-002&#10;CR-5290.00-22313-970-C1O-001&#10;DE-5290.00-22313-970-C1O-001"></textarea>
+
+              <div class="code-input-footer">
+                <div class="code-counter">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                  <span id="codeCount">0 códigos</span>
+                </div>
+                <button id="analyzeBtn" class="btn btn-primary btn-analyze" type="button">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                  Gerar Taxonomias
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-side">
+            <div class="card card-info">
+              <div class="card-header">
+                <h3 class="card-title">Como funciona</h3>
+              </div>
+              <div class="process-steps">
+                <div class="process-step">
+                  <div class="process-step-num">1</div>
+                  <div class="process-step-body">
+                    <strong>Localização</strong>
+                    <span>Busca o código nas LDs carregadas e referências incorporadas</span>
+                  </div>
+                </div>
+                <div class="process-step">
+                  <div class="process-step-num">2</div>
+                  <div class="process-step-body">
+                    <strong>Análise de Similaridade</strong>
+                    <span>Compara título, disciplina e família do código com taxonomias validadas</span>
+                  </div>
+                </div>
+                <div class="process-step">
+                  <div class="process-step-num">3</div>
+                  <div class="process-step-body">
+                    <strong>Validação Matricial</strong>
+                    <span>Verifica conformidade com a matriz Tipo × Setor da base CONSAG</span>
+                  </div>
+                </div>
+                <div class="process-step">
+                  <div class="process-step-num">4</div>
+                  <div class="process-step-body">
+                    <strong>Score de Confiança</strong>
+                    <span>Calcula a confiança ponderada de cada campo da taxonomia</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════════
+           VIEW: SUGESTÕES
+      ══════════════════════════════ -->
+      <section class="view hidden" id="view-sugestoes">
+        <div id="resultsPanel">
+          <div class="view-header">
+            <div>
+              <h2 class="view-title">Sugestões de Taxonomia</h2>
+              <p class="view-subtitle" id="resultsSummary"></p>
+            </div>
+            <div class="view-actions">
+              <button id="selectAllBtn" class="btn btn-outline" type="button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Selecionar Aplicáveis
+              </button>
+              <button id="copyBtn" class="btn btn-outline" type="button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                Copiar Relação
+              </button>
+              <button id="xlsxBtn" class="btn btn-outline" type="button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Exportar .xlsx
+              </button>
+              <button id="applyBtn" class="btn btn-primary" type="button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Aplicar nas LDs e Baixar
+              </button>
+            </div>
+          </div>
+
+          <!-- Filters & Search -->
+          <div class="table-toolbar">
+            <div class="table-search-wrap">
+              <svg class="table-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input class="table-search" id="tableSearch" type="text" placeholder="Buscar por código, título, taxonomia…" />
+            </div>
+            <div class="table-filters">
+              <select class="filter-select" id="filterStatus">
+                <option value="">Todos os status</option>
+                <option value="Taxonomia em branco">Em branco</option>
+                <option value="Taxonomia preenchida">Preenchida</option>
+                <option value="Não encontrado">Não encontrado</option>
+              </select>
+              <select class="filter-select" id="filterConfianca">
+                <option value="">Todas as confianças</option>
+                <option value="alta">Alta (≥95%)</option>
+                <option value="media-alta">Boa (85–94%)</option>
+                <option value="media">Média (70–84%)</option>
+                <option value="baixa">Baixa (&lt;70%)</option>
+              </select>
+            </div>
+            <div class="table-info" id="tableInfo"></div>
+          </div>
+
+          <!-- Legend -->
+          <div class="confidence-legend">
+            <span class="legend-item"><i class="conf-dot conf-dot--green"></i>Alta ≥ 95%</span>
+            <span class="legend-item"><i class="conf-dot conf-dot--blue"></i>Boa 85–94%</span>
+            <span class="legend-item"><i class="conf-dot conf-dot--yellow"></i>Média 70–84%</span>
+            <span class="legend-item"><i class="conf-dot conf-dot--red"></i>Baixa &lt;70%</span>
+            <span class="legend-note">A taxonomia sugerida pode ser editada antes da aplicação. Divergências da base são marcadas para revisão.</span>
+          </div>
+
+          <!-- Table -->
+          <div class="table-wrap">
+            <table class="results-table" id="resultsTable">
+              <thead>
+                <tr>
+                  <th class="col-check"></th>
+                  <th class="col-code" data-sort="code">Código <span class="sort-icon">↕</span></th>
+                  <th class="col-title">Título / Disciplina</th>
+                  <th class="col-status">Status LD</th>
+                  <th class="col-current">Taxonomia Atual</th>
+                  <th class="col-suggested">Taxonomia Sugerida</th>
+                  <th class="col-confidence" data-sort="confidence">Confiança <span class="sort-icon">↕</span></th>
+                  <th class="col-origin">Origem</th>
+                  <th class="col-criterion">Critério</th>
+                  <th class="col-action">Ação</th>
+                </tr>
+              </thead>
+              <tbody id="resultsBody"></tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          <div class="table-pagination" id="tablePagination" style="display:none">
+            <button class="page-btn" id="pagePrev" disabled>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+              Anterior
+            </button>
+            <div class="page-info" id="pageInfo">Página 1 de 1</div>
+            <button class="page-btn" id="pageNext">
+              Próxima
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Empty state for sugestoes view before analysis -->
+        <div class="empty-results-card" id="emptyResultsCard">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".4">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+          <h3>Nenhuma sugestão ainda</h3>
+          <p>Execute uma análise para ver as sugestões de taxonomia aqui.</p>
+          <button class="btn btn-primary" onclick="document.querySelector('[data-view=analise]').click()">
+            Ir para Análise
+          </button>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════════
+           VIEW: RELATÓRIOS
+      ══════════════════════════════ -->
+      <section class="view hidden" id="view-relatorios">
+        <div class="view-header">
+          <div>
+            <h2 class="view-title">Relatórios e Exportação</h2>
+            <p class="view-subtitle">Exporte os resultados e aplique as taxonomias nas LDs</p>
+          </div>
+        </div>
+
+        <div class="two-col-layout">
+          <div class="col-main">
+            <!-- Exportar Relação XLSX -->
+            <div class="card export-card">
+              <div class="export-card-icon export-card-icon--green">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+              </div>
+              <div class="export-card-body">
+                <h3>Exportar Relação de Taxonomias</h3>
+                <p>Gera planilha Excel com todos os resultados da análise: código, taxonomia atual, sugestão, confiança, critério e detalhes de cada segmento.</p>
+                <div class="export-preview" id="exportPreview">
+                  <div class="export-preview-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <span id="exportRowCount">— linhas de resultado</span>
+                  </div>
+                  <div class="export-preview-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <span>18 colunas exportadas (código, taxonomias, confiança, origem, critério, detalhes por segmento)</span>
+                  </div>
+                  <div class="export-preview-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <span>Filtros automáticos e cabeçalho fixo</span>
+                  </div>
+                  <div class="export-preview-item export-preview-item--green">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <span>Arquivo validado para abertura no Microsoft Excel</span>
+                  </div>
+                </div>
+              </div>
+              <div class="export-card-action">
+                <button id="xlsxBtnReport" class="btn btn-primary" type="button" onclick="document.getElementById('xlsxBtn').click()">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  Exportar Relação .xlsx
+                </button>
+              </div>
+            </div>
+
+            <!-- Aplicar nas LDs -->
+            <div class="card export-card">
+              <div class="export-card-icon export-card-icon--blue">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </div>
+              <div class="export-card-body">
+                <h3>Aplicar Taxonomias nas LDs e Baixar</h3>
+                <p>Preenche a coluna Taxonomia apenas nas células em branco das LDs selecionadas e gera novas cópias dos arquivos para download. Células com valor existente são protegidas.</p>
+                <div class="export-preview">
+                  <div class="export-preview-item" id="applySelectedCount">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <span>Selecione sugestões na aba Sugestões antes de aplicar</span>
+                  </div>
+                </div>
+              </div>
+              <div class="export-card-action">
+                <button class="btn btn-outline" type="button" onclick="document.querySelector('[data-view=sugestoes]').click()">
+                  Revisar Sugestões →
+                </button>
+                <button id="applyBtnReport" class="btn btn-primary" type="button" onclick="document.getElementById('applyBtn').click()">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  Aplicar nas LDs e Baixar
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-side">
+            <div class="card card-info">
+              <div class="card-header">
+                <h3 class="card-title">Sobre a Exportação</h3>
+              </div>
+              <div class="tips-list">
+                <div class="tip-item">
+                  <div class="tip-icon tip-icon--blue">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  </div>
+                  <span>Somente células em branco são preenchidas</span>
+                </div>
+                <div class="tip-item">
+                  <div class="tip-icon tip-icon--blue">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </div>
+                  <span>A estrutura interna da planilha é preservada</span>
+                </div>
+                <div class="tip-item">
+                  <div class="tip-icon tip-icon--green">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                  </div>
+                  <span>Múltiplas LDs → baixadas em .zip automaticamente</span>
+                </div>
+                <div class="tip-item">
+                  <div class="tip-icon tip-icon--green">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                  </div>
+                  <span>Arquivo .xlsx validado — abre sem aviso no Excel</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════════
+           VIEW: CONFIGURAÇÕES
+      ══════════════════════════════ -->
+      <section class="view hidden" id="view-configuracoes">
+        <div class="view-header">
+          <div>
+            <h2 class="view-title">Configurações</h2>
+            <p class="view-subtitle">Informações sobre o sistema</p>
+          </div>
+        </div>
+        <div class="two-col-layout">
+          <div class="col-main">
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">Sobre o Sistema</h3>
+              </div>
+              <div class="about-grid">
+                <div class="about-item">
+                  <span class="about-label">Sistema</span>
+                  <span class="about-value">Taxonomia CONSAG v1.3</span>
+                </div>
+                <div class="about-item">
+                  <span class="about-label">Empresa</span>
+                  <span class="about-value">GRCON · Controle Documental</span>
+                </div>
+                <div class="about-item">
+                  <span class="about-label">Base Padrão</span>
+                  <span class="about-value">CONSAG-PHC-ENG-DC-GERA-GES-PT-0001_19 1</span>
+                </div>
+                <div class="about-item">
+                  <span class="about-label">Processamento</span>
+                  <span class="about-value">100% local no navegador — nenhum dado é enviado</span>
+                </div>
+                <div class="about-item">
+                  <span class="about-label">Compatibilidade</span>
+                  <span class="about-value">Google Chrome e Microsoft Edge (versões atuais)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       MODAL: EVIDÊNCIAS
+  ═══════════════════════════════════════════ -->
+  <div class="modal-overlay hidden" id="evidenceModalOverlay" role="dialog" aria-modal="true" aria-labelledby="evidenceModalTitle">
+    <div class="modal evidence-modal">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title" id="evidenceModalTitle">Evidências da Recomendação</h3>
+          <p class="modal-subtitle" id="evidenceModalCode"></p>
+        </div>
+        <button class="modal-close" id="evidenceModalClose" aria-label="Fechar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" id="evidenceModalBody">
+        <!-- Preenchido dinamicamente pelo ui.js -->
       </div>
     </div>
-    <div class="top-status">
-      <span class="status-dot"></span>
-      Processamento local · nenhum arquivo é enviado
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       TOAST & BUSY OVERLAY
+  ═══════════════════════════════════════════ -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <div id="busy" class="busy-overlay hidden" role="status" aria-live="assertive">
+    <div class="busy-card">
+      <div class="busy-spinner">
+        <svg viewBox="0 0 50 50" class="spinner-svg">
+          <circle cx="25" cy="25" r="20" fill="none" stroke-width="4" class="spinner-track"/>
+          <circle cx="25" cy="25" r="20" fill="none" stroke-width="4" class="spinner-fill"/>
+        </svg>
+      </div>
+      <strong id="busyText" class="busy-text">Processando…</strong>
+      <div class="busy-sub">Aguarde, processamento local em andamento</div>
     </div>
-  </header>
+  </div>
 
-  <main class="page">
-    <section class="hero panel">
-      <div>
-        <span class="pill">CONSAG · PADRÃO DE TAXONOMIA</span>
-        <h2>Gere e preencha taxonomias em lote</h2>
-        <p>Informe vários códigos de documento. O sistema cruza a estrutura oficial da base CONSAG, a série do código, o título, a disciplina e as taxonomias já validadas. Divergências com a matriz tipo × setor são marcadas para revisão.</p>
-      </div>
-      <div class="hero-stats">
-        <div class="stat"><strong id="statTypes">—</strong><span>tipos documentais</span></div>
-        <div class="stat"><strong id="statExamples">—</strong><span>taxonomias de referência</span></div>
-        <div class="stat"><strong id="statRefs">—</strong><span>documentos indexados</span></div>
-      </div>
-    </section>
-
-    <section class="workspace-grid">
-      <div class="panel upload-panel">
-        <div class="panel-heading">
-          <div>
-            <span class="step">1</span>
-            <h3>LDs de trabalho</h3>
-          </div>
-          <span class="muted">.xlsx / .xlsm</span>
-        </div>
-        <label id="ldDrop" class="dropzone">
-          <input id="ldFiles" type="file" accept=".xlsx,.xlsm" multiple hidden />
-          <div class="drop-icon">＋</div>
-          <strong>Carregar uma ou mais LDs</strong>
-          <span>Arraste os arquivos aqui ou clique para selecionar</span>
-        </label>
-        <div id="ldList" class="file-list empty-state">Nenhuma LD carregada. A consulta ainda funciona com as 5 LDs de referência incorporadas.</div>
-        <button id="blankAnalyzeBtn" class="secondary-button blank-analyze-button" type="button">Detectar Taxonomias em branco</button>
-      </div>
-
-      <div class="panel codes-panel">
-        <div class="panel-heading">
-          <div>
-            <span class="step">2</span>
-            <h3>Códigos para analisar</h3>
-          </div>
-          <button id="clearCodes" class="link-button" type="button">Limpar</button>
-        </div>
-        <textarea id="codesInput" spellcheck="false" placeholder="Cole um código por linha. Ex.:&#10;LI-5290.00-22213-970-C1O-002&#10;CR-5290.00-22313-970-C1O-001&#10;DE-5290.00-22313-970-C1O-001"></textarea>
-        <div class="input-footer">
-          <span id="codeCount">0 códigos</span>
-          <button id="analyzeBtn" class="primary-button" type="button">Gerar taxonomias</button>
-        </div>
-      </div>
-    </section>
-
-    <section id="resultsPanel" class="panel results-panel hidden">
-      <div class="results-toolbar">
-        <div>
-          <span class="step">3</span>
-          <h3>Resultado da análise</h3>
-          <p id="resultsSummary" class="muted"></p>
-        </div>
-        <div class="toolbar-actions">
-          <button id="selectAllBtn" class="secondary-button" type="button">Selecionar aplicáveis</button>
-          <button id="copyBtn" class="secondary-button" type="button">Copiar relação</button>
-          <button id="xlsxBtn" class="secondary-button" type="button">Exportar relação .xlsx</button>
-          <button id="applyBtn" class="primary-button" type="button">Aplicar nas LDs e baixar</button>
-        </div>
-      </div>
-      <div class="legend">
-        <span><i class="confidence high"></i>Alta confiança</span>
-        <span><i class="confidence medium"></i>Média confiança</span>
-        <span><i class="confidence low"></i>Revisar</span>
-        <span class="legend-note">A taxonomia sugerida pode ser editada antes da gravação. Divergências oficiais ficam fora da seleção automática.</span>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th class="check-col"></th>
-              <th>Código</th>
-              <th>Origem</th>
-              <th>Título / Disciplina</th>
-              <th>Taxonomia atual</th>
-              <th>Taxonomia sugerida</th>
-              <th>Confiança</th>
-              <th>Critério</th>
-            </tr>
-          </thead>
-          <tbody id="resultsBody"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="panel base-panel">
-      <div class="base-copy">
-        <span class="step">Base</span>
-        <div>
-          <h3>Base de classificação CONSAG</h3>
-          <p>O sistema já contém a estrutura extraída de <strong>CONSAG-PHC-ENG-DC-GERA-GES-PT-0001_19 1</strong>. Se houver uma revisão futura, você pode substituir a base local sem alterar o sistema.</p>
-          <div id="baseStatus" class="base-status"></div>
-        </div>
-      </div>
-      <label class="secondary-button file-button">
-        Atualizar base CONSAG
-        <input id="baseFile" type="file" accept=".xlsx,.xlsm" hidden />
-      </label>
-    </section>
-  </main>
-
-  <div id="toast" class="toast" role="status"></div>
-  <div id="busy" class="busy hidden"><div class="spinner"></div><strong id="busyText">Processando…</strong></div>
-
+  <!-- ═══════════════════════════════════════════
+       SCRIPTS
+  ═══════════════════════════════════════════ -->
   <script src="taxonomy_data.js"></script>
   <script src="report_template.js"></script>
   <script src="app.js"></script>
+  <script src="ui.js"></script>
 </body>
 </html>

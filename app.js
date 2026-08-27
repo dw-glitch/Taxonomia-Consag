@@ -71,8 +71,8 @@
     return { project:p[0], type:p[1], sector:p[2], stage:p[3], front:p[4], discipline:p[5], language:p[6], sequence:p[7] };
   }
 
-  function confidenceClass(n) { return n >= 85 ? 'high' : n >= 65 ? 'medium' : 'low'; }
-  function confidenceLabel(n) { return n >= 85 ? 'Alta' : n >= 65 ? 'Média' : 'Revisar'; }
+  function confidenceClass(n) { return n >= 95 ? 'high' : n >= 85 ? 'medium-high' : n >= 70 ? 'medium' : 'low'; }
+  function confidenceLabel(n) { return n >= 95 ? 'Alta' : n >= 85 ? 'Boa' : n >= 70 ? 'Média' : 'Revisar'; }
 
   function toast(msg, kind='ok') {
     els.toast.textContent = msg;
@@ -535,25 +535,39 @@
     const rs=state.results; els.resultsPanel.classList.remove('hidden');
     const found=rs.filter(r=>r.found).length, writable=rs.filter(r=>r.selected).length, missing=rs.length-found, blanks=rs.filter(r=>r.emptyCount>0).length;
     els.resultsSummary.textContent=`${rs.length} analisados · ${found} localizados${blanks?` · ${blanks} com Taxonomia em branco`:''} · ${writable} prontos para preencher${missing?` · ${missing} não encontrados`:''}.`;
+
+    function statusBadge(r) {
+      if(!r.found) return `<span class="status-badge status-badge--notfound">Não encontrado</span>`;
+      const s=r.status||'';
+      if(s.includes('em branco')||s.includes('Taxonomia em branco')) return `<span class="status-badge status-badge--blank">Em branco</span>`;
+      if(s.includes('Parcialmente')) return `<span class="status-badge status-badge--partial">${escapeHtml(s)}</span>`;
+      if(s.includes('inválida')) return `<span class="status-badge status-badge--invalid">Inválida</span>`;
+      if(s.includes('preenchida')) return `<span class="status-badge status-badge--filled">Preenchida</span>`;
+      return `<span class="status-badge status-badge--ref">${escapeHtml(s||'Referência')}</span>`;
+    }
+
     els.resultsBody.innerHTML=rs.map((r,i)=>{
-      const cc=confidenceClass(r.confidence); const title=[r.title,r.disciplineText].filter(Boolean).join(' · ')||'—';
-      return `<tr class="${r.found?'':'not-found'}" data-index="${i}">
-        <td class="check-col"><input class="row-check" type="checkbox" ${r.selected?'checked':''} ${!r.writable||!validTax(r.taxonomy)?'disabled':''}></td>
-        <td><strong class="doc-code">${escapeHtml(r.code)}</strong></td>
-        <td><span class="origin-badge ${r.writable?'loaded':'reference'}">${escapeHtml(r.found?r.origin:'Não encontrado')}</span></td>
-        <td><div class="title-cell"><strong>${escapeHtml(r.title||'—')}</strong><span>${escapeHtml(r.disciplineText||'')}</span></div></td>
-        <td><div class="current-stack">${r.current?`<span class="tax-current">${escapeHtml(r.current)}</span>`:''}${r.emptyCount>0?`<span class="blank-badge">Taxonomia em branco${r.matches?.length>1?` · ${r.emptyCount}/${r.matches.length} ocorrência(s)`:''}</span>`:(!r.current?'<span class="tax-current empty">Vazio</span>':'')}</div></td>
-        <td>${r.found?`<input class="tax-input" value="${escapeHtml(r.taxonomy)}" spellcheck="false" ${!r.taxonomy?'placeholder="Revisão necessária"':''}>`:'—'}</td>
-        <td><span class="confidence-badge ${cc}"><i></i>${confidenceLabel(r.confidence)} · ${r.confidence}%</span></td>
-        <td><div class="criteria">${escapeHtml(r.criterion)}</div></td>
+      const cc=confidenceClass(r.confidence);
+      return `<tr class="${r.found?'':'not-found'}${r.requiresReview?' row-requires-review':''}" data-index="${i}">
+        <td class="col-check"><input class="row-check" type="checkbox" ${r.selected?'checked':''} ${!r.writable||!validTax(r.taxonomy)?'disabled':''}></td>
+        <td class="col-code"><strong class="doc-code">${escapeHtml(r.code)}</strong></td>
+        <td class="col-title"><div class="title-cell"><strong>${escapeHtml(r.title||'—')}</strong><span>${escapeHtml(r.disciplineText||'')}</span></div></td>
+        <td class="col-status">${statusBadge(r)}</td>
+        <td class="col-current"><div class="current-stack">${r.current?`<span class="tax-current">${escapeHtml(r.current)}</span>`:''}${r.emptyCount>0?`<span class="blank-badge">Em branco${r.matches?.length>1?` · ${r.emptyCount}/${r.matches.length}`:''}</span>`:(!r.current?'<span class="tax-current empty">Vazio</span>':'')}</div></td>
+        <td class="col-suggested">${r.found?`<input class="tax-input" value="${escapeHtml(r.taxonomy)}" spellcheck="false" ${!r.taxonomy?'placeholder="Revisão necessária"':''}>`:'—'}</td>
+        <td class="col-confidence"><span class="confidence-badge ${cc}"><i></i>${confidenceLabel(r.confidence)} · ${r.confidence}%</span></td>
+        <td class="col-origin"><span class="origin-badge ${r.writable?'loaded':'reference'}">${escapeHtml(r.found?r.origin:'Não encontrado')}</span></td>
+        <td class="col-criterion"><div class="criteria">${escapeHtml(r.criterion)}</div></td>
+        <td class="col-action"></td>
       </tr>`;
     }).join('');
+
     els.resultsBody.querySelectorAll('tr').forEach(tr=>{
       const i=Number(tr.dataset.index), r=state.results[i], chk=tr.querySelector('.row-check'), inp=tr.querySelector('.tax-input');
       if(chk)chk.addEventListener('change',()=>{r.selected=chk.checked});
       if(inp)inp.addEventListener('input',()=>{r.taxonomy=inp.value.trim().toUpperCase();inp.value=r.taxonomy;const ok=validTax(r.taxonomy);inp.classList.toggle('invalid',!ok);if(chk){chk.disabled=!r.writable||!ok;if(!ok){chk.checked=false;r.selected=false}}});
     });
-    els.resultsPanel.scrollIntoView({behavior:'smooth',block:'start'});
+    // Navigation to sugestoes view is handled by ui.js MutationObserver
   }
 
   function selectApplicable(){for(const r of state.results)r.selected=!!(r.writable&&r.emptyCount>0&&validTax(r.taxonomy)&&!r.requiresReview);renderResults()}
