@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#0b1739" />
+  <title>Taxonomia Consag</title>
+  <link rel="icon" href="https://raw.githubusercontent.com/dw-glitch/GRCON/main/grcon-icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo-shell">
+        <img class="logo" src="https://raw.githubusercontent.com/dw-glitch/GRCON/main/grcon-logo-app.png" alt="GRCON" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'" />
+        <div class="logo-fallback">GR</div>
+      </div>
+      <div>
+        <div class="eyebrow">GRCON · CONTROLE DOCUMENTAL</div>
+        <h1>Taxonomia Consag</h1>
+      </div>
+    </div>
+    <div class="top-status">
+      <span class="status-dot"></span>
+      Processamento local · nenhum arquivo é enviado
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="hero panel">
+      <div>
+        <span class="pill">CONSAG · PADRÃO DE TAXONOMIA</span>
+        <h2>Gere e preencha taxonomias em lote</h2>
+        <p>Informe vários códigos de documento. O sistema cruza a estrutura oficial da base CONSAG, a série do código, o título, a disciplina e as taxonomias já validadas. Divergências com a matriz tipo × setor são marcadas para revisão.</p>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><strong id="statTypes">—</strong><span>tipos documentais</span></div>
+        <div class="stat"><strong id="statExamples">—</strong><span>taxonomias de referência</span></div>
+        <div class="stat"><strong id="statRefs">—</strong><span>documentos indexados</span></div>
+      </div>
+    </section>
+
+    <section class="workspace-grid">
+      <div class="panel upload-panel">
+        <div class="panel-heading">
+          <div>
+            <span class="step">1</span>
+            <h3>LDs de trabalho</h3>
+          </div>
+          <span class="muted">.xlsx / .xlsm</span>
+        </div>
+        <label id="ldDrop" class="dropzone">
+          <input id="ldFiles" type="file" accept=".xlsx,.xlsm" multiple hidden />
+          <div class="drop-icon">＋</div>
+          <strong>Carregar uma ou mais LDs</strong>
+          <span>Arraste os arquivos aqui ou clique para selecionar</span>
+        </label>
+        <div id="ldList" class="file-list empty-state">Nenhuma LD carregada. A consulta ainda funciona com as 5 LDs de referência incorporadas.</div>
+        <button id="blankAnalyzeBtn" class="secondary-button blank-analyze-button" type="button">Detectar Taxonomias em branco</button>
+      </div>
+
+      <div class="panel codes-panel">
+        <div class="panel-heading">
+          <div>
+            <span class="step">2</span>
+            <h3>Códigos para analisar</h3>
+          </div>
+          <button id="clearCodes" class="link-button" type="button">Limpar</button>
+        </div>
+        <textarea id="codesInput" spellcheck="false" placeholder="Cole um código por linha. Ex.:&#10;LI-5290.00-22213-970-C1O-002&#10;CR-5290.00-22313-970-C1O-001&#10;DE-5290.00-22313-970-C1O-001"></textarea>
+        <div class="input-footer">
+          <span id="codeCount">0 códigos</span>
+          <button id="analyzeBtn" class="primary-button" type="button">Gerar taxonomias</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="resultsPanel" class="panel results-panel hidden">
+      <div class="results-toolbar">
+        <div>
+          <span class="step">3</span>
+          <h3>Resultado da análise</h3>
+          <p id="resultsSummary" class="muted"></p>
+        </div>
+        <div class="toolbar-actions">
+          <button id="selectAllBtn" class="secondary-button" type="button">Selecionar aplicáveis</button>
+          <button id="copyBtn" class="secondary-button" type="button">Copiar relação</button>
+          <button id="xlsxBtn" class="secondary-button" type="button">Exportar relação .xlsx</button>
+          <button id="applyBtn" class="primary-button" type="button">Aplicar nas LDs e baixar</button>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i class="confidence high"></i>Alta confiança</span>
+        <span><i class="confidence medium"></i>Média confiança</span>
+        <span><i class="confidence low"></i>Revisar</span>
+        <span class="legend-note">A taxonomia sugerida pode ser editada antes da gravação. Divergências oficiais ficam fora da seleção automática.</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="check-col"></th>
+              <th>Código</th>
+              <th>Origem</th>
+              <th>Título / Disciplina</th>
+              <th>Taxonomia atual</th>
+              <th>Taxonomia sugerida</th>
+              <th>Confiança</th>
+              <th>Critério</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel base-panel">
+      <div class="base-copy">
+        <span class="step">Base</span>
+        <div>
+          <h3>Base de classificação CONSAG</h3>
+          <p>O sistema já contém a estrutura extraída de <strong>CONSAG-PHC-ENG-DC-GERA-GES-PT-0001_19 1</strong>. Se houver uma revisão futura, você pode substituir a base local sem alterar o sistema.</p>
+          <div id="baseStatus" class="base-status"></div>
+        </div>
+      </div>
+      <label class="secondary-button file-button">
+        Atualizar base CONSAG
+        <input id="baseFile" type="file" accept=".xlsx,.xlsm" hidden />
+      </label>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status"></div>
+  <div id="busy" class="busy hidden"><div class="spinner"></div><strong id="busyText">Processando…</strong></div>
+
+  <script src="taxonomy_data.js"></script>
+  <script src="report_template.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+Taxonomia Consag v1.3
+27/08/2026
+- Relatório XLSX corrigido: geração baseada em modelo XLSX válido, sem montagem manual do pacote XML.
+- Exportação validada para evitar aviso de reparo/corrupção no Excel.
