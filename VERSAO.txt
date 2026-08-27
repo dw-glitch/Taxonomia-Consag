@@ -1,4 +1,21 @@
-Taxonomia Consag v1.3
+Taxonomia Consag v1.3.1
 27/08/2026
+
+- Correção crítica: a LD carregada deixava de aparecer no painel "Listas de Documentos".
+  Causa raiz: MutationObserver recursivo em ui.js que observava #ldList e reescrevia o
+  próprio nó observado, apagando a lista ~160 ms após o upload.
+- Painel de LDs reescrito a partir do estado (nome, data, registros, tamanho, situação, origem),
+  com estado de carregamento, estado de sucesso, estado vazio, pesquisa, ordenação,
+  atualização e remoção.
+- app.js e ui.js passam a se comunicar por um bus de estado explícito (TaxonomiaBus),
+  substituindo a leitura de estado a partir do DOM.
+- Tabela de resultados: filtros, paginação, KPIs e gráficos passam a operar sobre dados;
+  delegação de eventos no lugar de listeners por linha.
+- Desempenho: análise de 8.000 códigos ~3,6x mais rápida (42 s -> 12 s), com resultado
+  de classificação idêntico ao da versão anterior.
+- Responsividade (não havia nenhuma media query) e acessibilidade.
+
+Versão anterior:
+Taxonomia Consag v1.3
 - Relatório XLSX corrigido: geração baseada em modelo XLSX válido, sem montagem manual do pacote XML.
 - Exportação validada para evitar aviso de reparo/corrupção no Excel.

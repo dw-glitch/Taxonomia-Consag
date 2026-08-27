@@ -54,3 +54,35 @@ Recomendado: versões atuais do Google Chrome ou Microsoft Edge em Windows.
 
 ## Correção v1.3 — relatório Excel
 A exportação da relação deixou de construir o pacote XLSX/XML do zero. O sistema usa um modelo XLSX válido gerado previamente e altera somente os dados da planilha da relação, preservando a estrutura interna do arquivo. Isso evita o aviso do Excel de que o arquivo precisa ser reparado.
+
+
+## Correção v1.3.1 — a LD carregada não aparecia no painel
+
+### Sintoma
+O upload concluía com sucesso, mas o painel abaixo da área de upload voltava a exibir
+**"Nenhuma LD carregada"**, mesmo com o arquivo lido corretamente.
+
+### Causa raiz
+`ui.js` registrava um `MutationObserver` sobre `#ldList` e, no próprio callback, reescrevia
+`innerHTML` e `className` desse mesmo nó — que estava sendo observado. A escrita re-disparava
+o observer; na segunda passagem, os itens `.file-item` gerados pelo `app.js` já haviam sido
+substituídos por `.ld-item`, então a lista era considerada vazia e o estado vazio apagava a LD
+recém-carregada. O upload, a leitura do arquivo e o estado da aplicação sempre estiveram corretos:
+o dado era destruído na camada de apresentação, cerca de 160 ms depois de aparecer na tela.
+
+### Correção
+O DOM deixou de ser usado como transporte de estado entre as duas camadas:
+
+- `app.js` é o dono único do estado e do nó `#ldList`, e publica os dados no `TaxonomiaBus`
+  (`tax:lds`, `tax:results`, `tax:selection`, `tax:base`).
+- `ui.js` apenas consome esses eventos. Não há mais nenhum `MutationObserver` no projeto.
+
+### Também nesta versão
+- Estados de **carregamento** (nome, tamanho, barra, percentual e status por arquivo),
+  **sucesso** (nome, data, quantidade de documentos, situação) e **vazio** (ícone, texto e botão).
+- Lista de LDs com pesquisa, ordenação, atualização e remoção.
+- Filtros e paginação da tabela deixaram de contar linhas removidas do documento
+  (o rodapé exibia "0 resultados" com todas as linhas visíveis).
+- Delegação de eventos: a tabela não cria mais dois listeners por linha.
+- Análise de 8.000 códigos ~3,6x mais rápida, com saída de classificação idêntica.
+- Responsividade (o CSS não possuía nenhuma media query) e acessibilidade.

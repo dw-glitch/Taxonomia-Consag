@@ -16,10 +16,13 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="sidebar-logo-wrap">
-        <img class="sidebar-logo"
+        <!-- Logo remota é opcional: o app roda offline. A marca textual aparece
+             de imediato e a imagem só a substitui se realmente carregar. -->
+        <img class="sidebar-logo" hidden
           src="https://raw.githubusercontent.com/dw-glitch/GRCON/main/grcon-logo-app.png"
-          alt="GRCON"
-          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
+          alt="GRCON" loading="lazy" decoding="async"
+          onload="this.hidden=false;this.nextElementSibling.hidden=true"
+          onerror="this.remove()" />
         <div class="sidebar-logo-fallback">GR</div>
       </div>
       <div class="sidebar-brand-text">
@@ -459,13 +462,43 @@
               </div>
             </label>
 
-            <div id="ldList" class="ld-empty">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".35">
-                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
-                <polyline points="13 2 13 9 20 9"/>
-              </svg>
-              <p>Nenhuma LD carregada.<br>A análise usa as referências incorporadas.</p>
+            <!-- Estado de carregamento: nome, tamanho, barra, % e status por arquivo -->
+            <div id="ldUploadProgress" class="ld-upload" hidden aria-live="polite"></div>
+
+            <!-- Estado de sucesso -->
+            <div id="ldSuccess" class="ld-success" hidden role="status"></div>
+
+            <!-- Pesquisa / ordenação / atualização / remoção -->
+            <div id="ldToolbar" class="ld-toolbar" hidden>
+              <div class="ld-search-wrap">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input id="ldSearch" class="ld-search" type="search" placeholder="Pesquisar LD…" aria-label="Pesquisar LD carregada" />
+              </div>
+              <select id="ldSort" class="ld-sort" aria-label="Ordenar LDs carregadas">
+                <option value="recent">Mais recentes</option>
+                <option value="name">Nome (A–Z)</option>
+                <option value="records">Mais registros</option>
+                <option value="blanks">Mais em branco</option>
+              </select>
+              <button id="ldRefresh" class="ld-icon-btn" type="button" title="Reprocessar as LDs a partir dos arquivos originais" aria-label="Atualizar LDs">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                  <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+              </button>
+              <button id="ldClearAll" class="ld-icon-btn ld-icon-btn--danger" type="button" title="Remover todas as LDs da análise" aria-label="Remover todas as LDs">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                </svg>
+              </button>
             </div>
+            <div id="ldCount" class="ld-count" aria-hidden="true"></div>
+
+            <!-- Lista de LDs (renderizada por app.js a partir do estado) -->
+            <div id="ldList" class="ld-empty" aria-live="polite"></div>
 
             <div class="card-divider"></div>
 
@@ -572,13 +605,13 @@
               </svg>
               <input class="search-input" id="tableSearch" type="text" placeholder="Buscar por código, título, taxonomia…" />
             </div>
-            <select class="filter-select" id="filterStatus">
+            <select class="filter-select" id="filterStatus" aria-label="Filtrar por status na LD">
               <option value="">Todos os status</option>
               <option value="Em branco">Em branco</option>
               <option value="Preenchida">Preenchida</option>
               <option value="Não encontrado">Não encontrado</option>
             </select>
-            <select class="filter-select" id="filterConfianca">
+            <select class="filter-select" id="filterConfianca" aria-label="Filtrar por faixa de confiança">
               <option value="">Toda confiança</option>
               <option value="alta">Alta ≥95%</option>
               <option value="boa">Boa 85–94%</option>
@@ -616,6 +649,15 @@
               </thead>
               <tbody id="resultsBody"></tbody>
             </table>
+          </div>
+
+          <!-- Estado vazio dos filtros da tabela -->
+          <div class="table-empty" id="tableEmpty" hidden>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".45" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <p>Nenhum resultado corresponde aos filtros ativos.</p>
+            <button class="btn btn-outline btn-sm" id="tableClearFilters" type="button">Limpar filtros</button>
           </div>
 
           <!-- Paginação -->
