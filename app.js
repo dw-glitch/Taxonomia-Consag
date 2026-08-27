@@ -497,11 +497,13 @@
 
   async function analyze() {
     const codes=parseCodes(); if(!codes.length){toast('Cole ao menos um código de documento.','error');return;}
-    setBusy(true,`Analisando ${codes.length} códigos…`);
+    setBusy(true,`Analisando ${codes.length} código${codes.length!==1?'s':''}…`);
+    window._uiProgress?.show(`Preparando modelo para ${codes.length} documentos…`);
     try {
       buildModel(); const cache=new Map(), out=[];
       for(let i=0;i<codes.length;i++) {
-        if(i%40===0)await yieldUI(); const raw=codes[i], rec=resolveInput(raw);
+        if(i%10===0){await yieldUI();window._uiProgress?.set(Math.round(i/codes.length*95),`Analisando ${i+1} de ${codes.length}…`);}
+        const raw=codes[i], rec=resolveInput(raw);
         if(!rec){out.push({input:raw,code:normCode(raw)||raw,found:false,taxonomy:'',confidence:0,criterion:'Código não localizado nas LDs carregadas nem nas referências incorporadas.',status:'Não encontrado',matches:[],selected:false});continue;}
         const inf=inferTaxonomy(rec,cache); const loadedMatches=rec.matches||[];
         const loadedCurrent=loadedMatches.find(r=>validTax(r.taxonomy))?.taxonomy||'';
@@ -527,7 +529,9 @@
         });
       }
       state.results=out; renderResults();
-    } catch(e){console.error(e);toast('Erro durante a análise: '+e.message,'error');}
+      window._uiProgress?.set(100,'Concluído!');
+      setTimeout(()=>{ window._uiOnResults?.(); }, 0);
+    } catch(e){console.error(e);toast('Erro durante a análise: '+e.message,'error');window._uiProgress?.hide();}
     finally{setBusy(false)}
   }
 
