@@ -13,8 +13,50 @@
     loadedRecords: [],
     results: [],
     model: null,
+    modelDirty: true,
     customBase: null,
-    busyDepth: 0
+    busyDepth: 0,
+    // Painel de LDs (fonte da verdade: state.loadedFiles; estes campos sao apenas de exibicao)
+    ldQuery: '',
+    ldSort: 'recent',
+    ldBusy: false,
+    ldUpload: []
+  };
+
+  /* ────────────────────────────────────────────────────────────────
+     BUS DE ESTADO
+     Canal explicito entre app.js (dono do estado) e ui.js (camada de
+     apresentacao). Substitui a leitura de estado a partir do DOM, que
+     era a causa da dessincronizacao do painel de LDs.
+     Publica o ultimo payload de cada topico para assinantes tardios:
+     ui.js e carregado depois de app.js e precisa receber o estado
+     inicial mesmo tendo assinado apos a primeira emissao.
+     ──────────────────────────────────────────────────────────────── */
+  const busListeners = new Map();
+  const busLast = new Map();
+  function emit(type, detail) {
+    busLast.set(type, detail);
+    for (const fn of (busListeners.get(type) || []).slice()) {
+      try { fn(detail); } catch (err) { console.error('[TaxonomiaBus]', type, err); }
+    }
+  }
+  function busOn(type, fn) {
+    if (typeof fn !== 'function') return () => {};
+    if (!busListeners.has(type)) busListeners.set(type, []);
+    busListeners.get(type).push(fn);
+    if (busLast.has(type)) { try { fn(busLast.get(type)); } catch (err) { console.error('[TaxonomiaBus]', type, err); } }
+    return () => busOff(type, fn);
+  }
+  function busOff(type, fn) {
+    const arr = busListeners.get(type); if (!arr) return;
+    const i = arr.indexOf(fn); if (i >= 0) arr.splice(i, 1);
+  }
+  window.TaxonomiaBus = { on: busOn, off: busOff };
+  // Snapshot somente-leitura para depuração e para a camada de apresentação.
+  window.TaxonomiaState = {
+    get lds()      { return ldSnapshot(); },
+    get results()  { return state.results.slice(); },
+    get busy()     { return state.ldBusy || state.busyDepth > 0; }
   };
 
   const $ = (id) => document.getElementById(id);
@@ -24,20 +66,46 @@
     codesInput: $('codesInput'), clearCodes: $('clearCodes'), codeCount: $('codeCount'), analyzeBtn: $('analyzeBtn'),
     resultsPanel: $('resultsPanel'), resultsSummary: $('resultsSummary'), resultsBody: $('resultsBody'),
     selectAllBtn: $('selectAllBtn'), copyBtn: $('copyBtn'), xlsxBtn: $('xlsxBtn'), applyBtn: $('applyBtn'),
-    baseStatus: $('baseStatus'), baseFile: $('baseFile'), toast: $('toast'), busy: $('busy'), busyText: $('busyText')
+    baseStatus: $('baseStatus'), baseFile: $('baseFile'), toast: $('toast'), busy: $('busy'), busyText: $('busyText'),
+    ldToolbar: $('ldToolbar'), ldSearch: $('ldSearch'), ldSort: $('ldSort'),
+    ldRefresh: $('ldRefresh'), ldClearAll: $('ldClearAll'), ldCount: $('ldCount'),
+    ldUpload: $('ldUploadProgress'), ldSuccess: $('ldSuccess')
   };
 
   function escapeHtml(v) {
     return String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch]));
   }
 
-  function normText(v) {
+  /* ─────────────────────────────────────────────────────────────────
+     Memoização dos normalizadores de string.
+
+     normText/normCode/tokens são funções puras da string de entrada. No
+     perfil de uma análise de 8.000 códigos elas respondiam por ~65% do
+     tempo total: as ~1.000 descrições do catálogo oficial e os códigos das
+     3.100 referências eram renormalizados a cada documento analisado — o
+     mesmo valor, milhões de vezes. O cache tem teto para não virar
+     vazamento de memória em sessões longas.
+     ───────────────────────────────────────────────────────────────── */
+  function memoString(fn, limit) {
+    const cache = new Map();
+    return (v) => {
+      const k = typeof v === 'string' ? v : String(v ?? '');
+      const hit = cache.get(k);
+      if (hit !== undefined) return hit;
+      const out = fn(k);
+      if (cache.size >= limit) cache.clear();
+      cache.set(k, out);
+      return out;
+    };
+  }
+
+  const normText = memoString(function normTextRaw(v) {
     return String(v ?? '')
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
-  }
+  }, 60000);
 
-  function normCode(v) {
+  const normCode = memoString(function normCodeRaw(v) {
     let s = String(v ?? '').trim().replace(/^['"]|['"]$/g, '');
     s = s.split(/[\r\n\t]/)[0].trim();
     s = s.replace(/^.*[\\/]/, '').replace(/\.(XLSX|XLSM|PDF|DOCX?|ZIP)$/i, '');
@@ -47,16 +115,14 @@
     const m = s.match(pattern);
     if (m) s = m[0];
     return s.toUpperCase().replace(/\s+/g, '');
-  }
+  }, 60000);
 
-  function compactCode(v) { return normCode(v).replace(/[^A-Z0-9]/g, ''); }
+  const compactCode = memoString((v) => normCode(v).replace(/[^A-Z0-9]/g, ''), 60000);
   function docFamily(code) { return (normCode(code).split('-')[0] || '').replace(/[^A-Z]/g, ''); }
   function codeSeriesKey(code) { const c=normCode(code); if(/-\d{3}$/.test(c))return c.replace(/-\d{3}$/,''); const i=c.indexOf('_RIR'); if(i>0)return c.slice(0,i+4); return ''; }
 
   const STOP = new Set('DE DA DO DAS DOS E EM PARA POR COM SEM A O AS OS UM UMA NO NA NOS NAS AO AOS AREA UNIDADE DOCUMENTO DOCUMENTACAO PROJETO CONSAG PETROBRAS RNEST UHDTD U'.split(' '));
-  function tokens(v) {
-    return normText(v).split(' ').filter(x => x.length >= 2 && !STOP.has(x));
-  }
+  const tokens = memoString((v) => normText(v).split(' ').filter(x => x.length >= 2 && !STOP.has(x)), 60000);
   function tokenSet(v) { return new Set(tokens(v)); }
   function jaccard(a, b) {
     if (!a.size || !b.size) return 0;
@@ -284,24 +350,52 @@
   }
   function profileAdd(map,key,val){if(!key||!val)return;if(!map.has(key))map.set(key,[]);map.get(key).push(val)}
   function dictFrom(items){return new Map((items||[]).map(x=>[String(x.code||'').toUpperCase(),x]))}
-  function descriptionTokens(v){return tokens(v).filter(x=>x.length>=3)}
+  const descriptionTokens = memoString((v) => tokens(v).filter(x=>x.length>=3), 60000);
   function phraseScore(text, description) {
     const a=normText(text), b=normText(description); if(!a||!b)return 0;
     if(a===b)return 1; if(b.length>=7&&a.includes(b))return 0.99; if(a.length>=10&&b.includes(a))return 0.93;
     const aa=new Set(descriptionTokens(a)),bb=new Set(descriptionTokens(b)); return jaccard(aa,bb);
   }
 
+  /* Pool de sequenciais já utilizados. Reconstruído a cada análise para que
+     duas execuções seguidas dos mesmos códigos produzam o mesmo resultado —
+     reserveSequence() muta este mapa durante a análise. */
+  function buildSequencePool(ex) {
+    const used=new Map();
+    const add=(tax)=>{const p=splitTax(tax);if(!p)return;const key=[p.project,p.type,p.sector,p.stage,p.front,p.discipline,p.language].join('-');if(!used.has(key))used.set(key,new Set());used.get(key).add(Number(p.sequence));};
+    for(const e of ex) add(e.taxonomy);
+    for(const r of state.loadedRecords) if(validTax(r.taxonomy)) add(r.taxonomy);
+    return used;
+  }
+
+  /* Reconstrói o modelo apenas quando os dados de entrada mudaram.
+     Antes, buildModel() (26 mil registros) rodava em toda análise mesmo
+     sem nenhuma alteração de LD ou de base. */
+  function ensureModel() {
+    if(state.modelDirty || !state.model){ buildModel(); state.modelDirty=false; }
+    return state.model;
+  }
+
   function buildModel() {
     const d=state.data, examples=(d.examples||[]).filter(e=>validTax(e.taxonomy));
-    const ex=examples.map((e,i)=>{const p=splitTax(e.taxonomy);return {...e,_i:i,_titleNorm:normText(e.title),_discNorm:normText(e.disciplineText),_titleSet:tokenSet(e.title),_discSet:tokenSet(e.disciplineText),_family:docFamily(e.code),_tax:p};});
+    const ex=examples.map((e,i)=>{const p=splitTax(e.taxonomy);return {...e,_i:i,_titleNorm:normText(e.title),_discNorm:normText(e.disciplineText),_titleSet:tokenSet(e.title),_discSet:tokenSet(e.disciplineText),_family:docFamily(e.code),_compact:compactCode(e.code),_tax:p};});
     const refIndex=new Map(), compactIndex=new Map();
     function addRef(r,loaded=false) {
-      const key=normCode(r.code); if(!key)return; const rr={...r,code:key,loaded:loaded||r.loaded};
+      // O índice guarda CÓPIAS dos registros (o código é normalizado). Sem a
+      // referência de volta em `_src`, gravar a taxonomia aplicada atingiria
+      // apenas a cópia, e as estatísticas da LD continuariam mostrando as
+      // células como em branco depois de "Aplicar nas LDs".
+      const key=normCode(r.code); if(!key)return; const rr={...r,code:key,loaded:loaded||r.loaded,_src:r._src||r};
       if(!refIndex.has(key))refIndex.set(key,[]); refIndex.get(key).push(rr);
       const ck=compactCode(key); if(ck){if(!compactIndex.has(ck))compactIndex.set(ck,[]);compactIndex.get(ck).push(rr)}
     }
     for(const r of d.referenceRecords||[]) addRef(r,false);
     for(const r of state.loadedRecords) addRef(r,true);
+    // Ordena uma vez aqui (registros carregados primeiro) em vez de copiar e
+    // reordenar o array a cada consulta de código.
+    const byLoaded=(a,b)=>(b.loaded?1:0)-(a.loaded?1:0);
+    for(const arr of refIndex.values()) arr.sort(byLoaded);
+    for(const arr of compactIndex.values()) arr.sort(byLoaded);
 
     const familyTypeValues=new Map(), seriesTypeValues=new Map(), seriesSectorValues=new Map(), seriesDisciplineValues=new Map(), seriesFrontValues=new Map(), seriesExamples=new Map(), familyExamples=new Map(), typeSectorValues=new Map(), typeDiscSectorValues=new Map(), comboFrontValues=new Map(), titleExamples=new Map(), discTextExamples=new Map();
     const projectValues=[],stageValues=[],frontValues=[],languageValues=[];
@@ -318,9 +412,7 @@
     const profileMap=m=>new Map([...m].map(([k,v])=>[k,modeStats(v)]));
     const familyProfiles=profileMap(familyTypeValues), seriesTypeProfiles=profileMap(seriesTypeValues), seriesSectorProfiles=profileMap(seriesSectorValues), seriesDisciplineProfiles=profileMap(seriesDisciplineValues), seriesFrontProfiles=profileMap(seriesFrontValues), typeSectorProfiles=profileMap(typeSectorValues), typeDiscSectorProfiles=profileMap(typeDiscSectorValues), comboFrontProfiles=profileMap(comboFrontValues);
 
-    const used=new Map();
-    for(const e of ex){const p=splitTax(e.taxonomy), key=[p.project,p.type,p.sector,p.stage,p.front,p.discipline,p.language].join('-');if(!used.has(key))used.set(key,new Set());used.get(key).add(Number(p.sequence));}
-    for(const r of state.loadedRecords){if(validTax(r.taxonomy)){const p=splitTax(r.taxonomy),key=[p.project,p.type,p.sector,p.stage,p.front,p.discipline,p.language].join('-');if(!used.has(key))used.set(key,new Set());used.get(key).add(Number(p.sequence));}}
+    const used=buildSequencePool(ex);
 
     const docTypes=(state.customBase?.documentTypes||d.documentTypes||[]).map(x=>({...x,_set:tokenSet(x.description),_norm:normText(x.description)}));
     const sectorsArr=state.customBase?.sectors||d.sectors||[], disciplinesArr=state.customBase?.disciplines||d.disciplines||[];
@@ -332,8 +424,8 @@
   }
 
   function findRecordsForCode(input) {
-    const m=state.model, key=normCode(input), ck=compactCode(input); let arr=m.refIndex.get(key)||m.compactIndex.get(ck)||[];
-    return [...arr].sort((a,b)=>(b.loaded?1:0)-(a.loaded?1:0));
+    const m=state.model, key=normCode(input), ck=compactCode(input);
+    return m.refIndex.get(key)||m.compactIndex.get(ck)||[];
   }
 
   function officialTypeByTitle(title) {
@@ -353,7 +445,7 @@
     const seriesPool=series?(state.model.seriesExamples.get(series)||[]):[], familyPool=fam?(state.model.familyExamples.get(fam)||[]):[]; const pool=seriesPool.length>=3?seriesPool:(familyPool.length>=8?familyPool:state.model.ex);
     for(const e of pool){
       const t=jaccard(ts,e._titleSet), d=jaccard(ds,e._discSet), f=fam&&fam===e._family?1:0;
-      const ec=compactCode(e.code), codeOverlap=compact&&ec ? (compact.slice(0,-3)===ec.slice(0,-3)?1:(compact.slice(0,12)===ec.slice(0,12)?0.35:0)) : 0;
+      const ec=e._compact, codeOverlap=compact&&ec ? (compact.slice(0,-3)===ec.slice(0,-3)?1:(compact.slice(0,12)===ec.slice(0,12)?0.35:0)) : 0;
       const score=t*0.64+d*0.19+f*0.12+codeOverlap*0.05;
       if(score>0.04) scored.push({score,e,t,d,f});
     }
@@ -458,33 +550,379 @@
 
   // ---------- UI / workflow ----------
   function refreshStats() {
-    els.statTypes.textContent=(state.customBase?.documentTypes||state.data.documentTypes||[]).length.toLocaleString('pt-BR');
-    els.statExamples.textContent=(state.data.examples||[]).length.toLocaleString('pt-BR');
-    els.statRefs.textContent=(state.data.referenceRecords||[]).length.toLocaleString('pt-BR');
+    const types=(state.customBase?.documentTypes||state.data.documentTypes||[]).length;
+    const examples=(state.data.examples||[]).length;
+    const refs=(state.data.referenceRecords||[]).length;
+    els.statTypes.textContent=types.toLocaleString('pt-BR');
+    els.statExamples.textContent=examples.toLocaleString('pt-BR');
+    els.statRefs.textContent=refs.toLocaleString('pt-BR');
     const custom=state.customBase;
     els.baseStatus.innerHTML=custom
       ? `<strong>Base personalizada ativa</strong> · ${escapeHtml(custom.fileName)} · ${custom.documentTypes.length} tipos documentais.`
       : `<strong>Base incorporada ativa</strong> · ${escapeHtml(state.data.sourceFile||'CONSAG')} · revisão de referência ${escapeHtml(state.data.version||'')}.`;
+    // Publica os números em vez de deixar a UI observar mutações de #statTypes.
+    emit('tax:base', { custom:!!custom, fileName:custom?.fileName||'', types, examples, refs });
   }
   function refreshCodeCount(){const n=parseCodes().length;els.codeCount.textContent=`${n} ${n===1?'código':'códigos'}`}
   function parseCodes(){return els.codesInput.value.split(/[\n;]+/).map(s=>s.trim()).filter(Boolean)}
 
-  function refreshLDList() {
-    if(!state.loadedFiles.length){els.ldList.className='file-list empty-state';els.ldList.textContent='Nenhuma LD carregada. A consulta ainda funciona com as 5 LDs de referência incorporadas.';return;}
-    els.ldList.className='file-list';
-    els.ldList.innerHTML=state.loadedFiles.map(f=>`<div class="file-item"><span>✓</span><div><strong>${escapeHtml(f.name)}</strong><small>${f.records.length.toLocaleString('pt-BR')} documentos reconhecidos</small></div><button type="button" data-remove="${f.id}" title="Remover">×</button></div>`).join('');
-    els.ldList.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>removeLD(b.dataset.remove));
-  }
-  function removeLD(id){state.loadedFiles=state.loadedFiles.filter(f=>f.id!==id);state.loadedRecords=state.loadedFiles.flatMap(f=>f.records);buildModel();refreshLDList();toast('LD removida da análise.');}
+  /* ══════════════════════════════════════════════════════════════
+     PAINEL DE LDs — renderizado a partir de state.loadedFiles.
+     Este é o ÚNICO dono do nó #ldList. Nenhuma outra camada lê ou
+     reescreve esse DOM: ui.js recebe os dados pelo TaxonomiaBus.
+     ══════════════════════════════════════════════════════════════ */
 
-  async function loadLDFiles(files) {
-    const list=[...files].filter(f=>/\.(xlsx|xlsm)$/i.test(f.name)); if(!list.length)return;
-    setBusy(true,'Lendo LDs e indexando documentos…');
+  function fmtInt(n){ return Number(n||0).toLocaleString('pt-BR'); }
+  function fmtBytes(n) {
+    n = Number(n)||0; if(n <= 0) return '—';
+    const u=['B','KB','MB','GB']; let i=0, v=n;
+    while(v >= 1024 && i < u.length-1){ v/=1024; i++; }
+    return `${v.toFixed(i>0 && v<10 ? 1 : 0)} ${u[i]}`;
+  }
+  function fmtDateTime(ts) {
+    if(!ts) return '—';
+    try { return new Date(ts).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+    catch { return '—'; }
+  }
+
+  // Estatísticas por LD, calculadas uma vez por carga (e após aplicar),
+  // nunca dentro de laços de render.
+  function computeBookStats(book) {
+    let blanks=0, filled=0, invalid=0;
+    for(const r of book.records) {
+      const t=String(r.taxonomy||'').trim();
+      if(!t) blanks++;
+      else if(validTax(t)) filled++;
+      else invalid++;
+    }
+    book.stats={ records:book.records.length, blanks, filled, invalid };
+    return book.stats;
+  }
+
+  function ldSituation(st) {
+    if(!st || !st.records) return {label:'Sem documentos reconhecidos', kind:'warn'};
+    if(st.blanks === 0 && st.invalid === 0) return {label:'Totalmente taxonomizada', kind:'ok'};
+    if(st.blanks === st.records) return {label:'Taxonomia totalmente em branco', kind:'blank'};
+    if(st.blanks) return {label:`${fmtInt(st.blanks)} em branco`, kind:'blank'};
+    return {label:`${fmtInt(st.invalid)} inválida(s)`, kind:'warn'};
+  }
+
+  function ldSnapshot() {
+    return state.loadedFiles.map(f => {
+      const st = f.stats || computeBookStats(f);
+      return {
+        id:f.id, name:f.name, size:f.size||0, uploadedAt:f.uploadedAt||0,
+        records:st.records, blanks:st.blanks, filled:st.filled, invalid:st.invalid,
+        sheets:(f.sheets||[]).length, origin:f.origin||'Upload local',
+        situation:ldSituation(st)
+      };
+    });
+  }
+
+  function emitLDState() {
+    const files = ldSnapshot();
+    emit('tax:lds', {
+      files,
+      total: files.length,
+      records: files.reduce((n,f)=>n+f.records, 0),
+      blanks:  files.reduce((n,f)=>n+f.blanks, 0)
+    });
+  }
+
+  function ldVisibleFiles() {
+    const q = state.ldQuery.trim().toLowerCase();
+    let list = q ? state.loadedFiles.filter(f => f.name.toLowerCase().includes(q)) : state.loadedFiles.slice();
+    const s = state.ldSort;
+    list.sort((a,b)=>{
+      const sa=a.stats||computeBookStats(a), sb=b.stats||computeBookStats(b);
+      if(s==='name')    return a.name.localeCompare(b.name,'pt-BR');
+      if(s==='records') return sb.records - sa.records;
+      if(s==='blanks')  return sb.blanks  - sa.blanks;
+      return (b.uploadedAt||0) - (a.uploadedAt||0);
+    });
+    return list;
+  }
+
+  const LD_EMPTY_ICON = `<svg class="ld-empty-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/><line x1="9" y1="14" x2="15" y2="14"/><line x1="9" y1="17.5" x2="13" y2="17.5"/></svg>`;
+
+  function renderLDPanel() {
+    const total = state.loadedFiles.length;
+
+    if(els.ldToolbar) els.ldToolbar.hidden = total === 0;
+    if(els.ldCount) {
+      const recs = state.loadedFiles.reduce((n,f)=>n+((f.stats||computeBookStats(f)).records),0);
+      els.ldCount.textContent = total ? `${fmtInt(total)} LD${total!==1?'s':''} · ${fmtInt(recs)} registro${recs!==1?'s':''}` : '';
+    }
+
+    if(!total) {
+      els.ldList.className = 'ld-empty';
+      els.ldList.innerHTML = `
+        ${LD_EMPTY_ICON}
+        <p class="ld-empty-title">Nenhuma LD carregada</p>
+        <p class="ld-empty-text">Carregue uma Lista de Documentos <strong>.xlsx</strong> ou <strong>.xlsm</strong> para detectar taxonomias em branco e gravar as sugestões no próprio arquivo.<br>A consulta por código continua funcionando com as referências incorporadas.</p>
+        <button type="button" class="btn btn-primary btn-sm ld-empty-cta" data-ld-action="pick">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+          Carregar LD
+        </button>`;
+      emitLDState();
+      return;
+    }
+
+    const list = ldVisibleFiles();
+
+    if(!list.length) {
+      els.ldList.className = 'ld-empty';
+      els.ldList.innerHTML = `
+        ${LD_EMPTY_ICON}
+        <p class="ld-empty-title">Nenhuma LD corresponde à pesquisa</p>
+        <p class="ld-empty-text">${fmtInt(total)} LD${total!==1?'s':''} carregada${total!==1?'s':''}, mas nenhuma contém “${escapeHtml(state.ldQuery)}”.</p>
+        <button type="button" class="btn btn-outline btn-sm ld-empty-cta" data-ld-action="clear-search">Limpar pesquisa</button>`;
+      emitLDState();
+      return;
+    }
+
+    els.ldList.className = 'ld-loaded';
+    els.ldList.innerHTML = list.map(f => {
+      const st = f.stats || computeBookStats(f);
+      const sit = ldSituation(st);
+      const tags = [];
+      if(st.blanks)  tags.push(`<span class="ld-tag ld-tag--blank">${fmtInt(st.blanks)} em branco</span>`);
+      if(st.filled)  tags.push(`<span class="ld-tag ld-tag--ok">${fmtInt(st.filled)} preenchida${st.filled!==1?'s':''}</span>`);
+      if(st.invalid) tags.push(`<span class="ld-tag ld-tag--warn">${fmtInt(st.invalid)} inválida${st.invalid!==1?'s':''}</span>`);
+      tags.push(`<span class="ld-tag ld-tag--src">${escapeHtml(f.origin||'Upload local')}</span>`);
+      return `
+        <article class="ld-item" data-id="${escapeHtml(f.id)}">
+          <div class="ld-item-icon ld-item-icon--${sit.kind}" aria-hidden="true">${sit.kind==='ok'?'✓':sit.kind==='blank'?'!':'•'}</div>
+          <div class="ld-item-body">
+            <div class="ld-item-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</div>
+            <div class="ld-item-meta">
+              <span title="Data de upload">${fmtDateTime(f.uploadedAt)}</span>
+              <span aria-hidden="true">·</span>
+              <span title="Registros reconhecidos">${fmtInt(st.records)} registro${st.records!==1?'s':''}</span>
+              <span aria-hidden="true">·</span>
+              <span title="Tamanho do arquivo">${fmtBytes(f.size)}</span>
+            </div>
+            <div class="ld-item-tags">${tags.join('')}</div>
+          </div>
+          <button type="button" class="ld-item-rm" data-remove="${escapeHtml(f.id)}" title="Remover ${escapeHtml(f.name)} da análise" aria-label="Remover ${escapeHtml(f.name)} da análise">×</button>
+        </article>`;
+    }).join('');
+
+    emitLDState();
+  }
+
+  /* ── Estado de carregamento (nome, tamanho, barra, %, status) ── */
+  function renderLDUpload() {
+    if(!els.ldUpload) return;
+    const items = state.ldUpload;
+    if(!items.length){ els.ldUpload.hidden = true; els.ldUpload.innerHTML=''; return; }
+
+    const done  = items.filter(u=>u.state==='done').length;
+    const fail  = items.filter(u=>u.state==='error').length;
+    const overall = Math.round(items.reduce((n,u)=>n+u.pct,0) / items.length);
+    const heading = fail ? 'Falha ao carregar LD'
+      : done === items.length ? 'LDs processadas'
+      : items.length > 1 ? `Carregando LDs… (${done+1} de ${items.length})` : 'Carregando LD…';
+
+    els.ldUpload.hidden = false;
+    els.ldUpload.innerHTML = `
+      <div class="ld-up-head">
+        <span class="ld-up-title">${escapeHtml(heading)}</span>
+        <span class="ld-up-pct">${overall}%</span>
+      </div>
+      <div class="ld-up-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${overall}" aria-label="${escapeHtml(heading)}">
+        <div class="ld-up-fill${fail?' is-error':''}" style="width:${overall}%"></div>
+      </div>
+      <ul class="ld-up-list">
+        ${items.map(u=>`
+          <li class="ld-up-row ld-up-row--${u.state}">
+            <span class="ld-up-name" title="${escapeHtml(u.name)}">${escapeHtml(u.name)}</span>
+            <span class="ld-up-size">${fmtBytes(u.size)}</span>
+            <span class="ld-up-mini"><span class="ld-up-mini-fill" style="width:${u.pct}%"></span></span>
+            <span class="ld-up-status">${escapeHtml(u.status)}</span>
+            <span class="ld-up-rowpct">${u.pct}%</span>
+          </li>`).join('')}
+      </ul>`;
+  }
+
+  function ldUploadStart(files) {
+    state.ldUpload = files.map(f => ({ name:f.name, size:f.size, pct:0, status:'Na fila', state:'queued' }));
+    els.ldDrop?.classList.add('is-busy');
+    clearTimeout(ldUploadStart._t);
+    renderLDUpload();
+  }
+  function ldUploadStep(i, pct, status, kind) {
+    const u = state.ldUpload[i]; if(!u) return;
+    u.pct = Math.max(u.pct, pct); u.status = status;
+    u.state = kind || (u.pct >= 100 ? 'done' : 'active');
+    renderLDUpload();
+  }
+  function ldUploadEnd(keepMs) {
+    els.ldDrop?.classList.remove('is-busy');
+    clearTimeout(ldUploadStart._t);
+    ldUploadStart._t = setTimeout(() => { state.ldUpload = []; renderLDUpload(); }, keepMs);
+  }
+
+  /* ── Estado de sucesso ── */
+  function showLDSuccess(books) {
+    if(!els.ldSuccess || !books.length) return;
+    const recs = books.reduce((n,b)=>n+b.stats.records,0);
+    const blanks = books.reduce((n,b)=>n+b.stats.blanks,0);
+    const one = books.length === 1 ? books[0] : null;
+    els.ldSuccess.hidden = false;
+    els.ldSuccess.className = 'ld-success';
+    els.ldSuccess.innerHTML = `
+      <div class="ld-success-icon" aria-hidden="true">✓</div>
+      <div class="ld-success-body">
+        <p class="ld-success-title">${books.length===1?'LD carregada com sucesso':`${books.length} LDs carregadas com sucesso`}</p>
+        <dl class="ld-success-grid">
+          <div><dt>Nome</dt><dd title="${escapeHtml(one?one.name:books.map(b=>b.name).join(', '))}">${escapeHtml(one ? one.name : `${books.length} arquivos`)}</dd></div>
+          <div><dt>Data</dt><dd>${fmtDateTime(books[books.length-1].uploadedAt)}</dd></div>
+          <div><dt>Documentos</dt><dd>${fmtInt(recs)}</dd></div>
+          <div><dt>Situação</dt><dd>${blanks ? `${fmtInt(blanks)} com taxonomia em branco` : 'Todas as taxonomias preenchidas'}</dd></div>
+        </dl>
+      </div>
+      <button type="button" class="ld-success-close" data-ld-action="dismiss-success" aria-label="Fechar aviso">×</button>`;
+    clearTimeout(showLDSuccess._t);
+    showLDSuccess._t = setTimeout(() => { if(els.ldSuccess) els.ldSuccess.hidden = true; }, 12000);
+  }
+
+  function removeLD(id) {
+    const book = state.loadedFiles.find(f=>f.id===id); if(!book) return;
+    state.loadedFiles = state.loadedFiles.filter(f=>f.id!==id);
+    state.loadedRecords = state.loadedFiles.flatMap(f=>f.records);
+    state.modelDirty = true;
+    ensureModel();
+    renderLDPanel();
+    if(els.ldSuccess) els.ldSuccess.hidden = true;
+    toast(`“${book.name}” removida da análise.`);
+  }
+
+  function clearAllLDs() {
+    if(!state.loadedFiles.length) return;
+    const n = state.loadedFiles.length;
+    state.loadedFiles = []; state.loadedRecords = [];
+    state.modelDirty = true;
+    ensureModel();
+    renderLDPanel();
+    if(els.ldSuccess) els.ldSuccess.hidden = true;
+    toast(`${n} ${n===1?'LD removida':'LDs removidas'} da análise.`);
+  }
+
+  async function loadLDFiles(fileList) {
+    if(state.ldBusy){ toast('Aguarde o carregamento em andamento.','error'); return; }
+
+    const incoming = [...fileList];
+    if(!incoming.length) return;
+
+    const accepted = incoming.filter(f => /\.(xlsx|xlsm)$/i.test(f.name));
+    const rejected = incoming.length - accepted.length;
+    if(!accepted.length){ toast('Formato não suportado. Envie arquivos .xlsx ou .xlsm.','error'); return; }
+
+    // Deduplicação: mesmo nome + mesmo tamanho já carregado.
+    const known = new Set(state.loadedFiles.map(f => `${f.name}|${f.size||0}`));
+    const list = [], duplicates = [];
+    for(const f of accepted){
+      const key = `${f.name}|${f.size||0}`;
+      if(known.has(key)){ duplicates.push(f.name); continue; }
+      known.add(key); list.push(f);
+    }
+    if(!list.length){
+      toast(duplicates.length===1 ? `“${duplicates[0]}” já está carregada.` : `${duplicates.length} LDs já estavam carregadas.`,'error');
+      return;
+    }
+
+    state.ldBusy = true;
+    if(els.ldSuccess) els.ldSuccess.hidden = true;
+    ldUploadStart(list);
+
+    const loadedNow = [];
+    let failed = null;
     try {
-      for(const file of list){await yieldUI(); const book=await parseWorkbook(file); await extractLDRecords(book); state.loadedFiles.push(book);}
-      state.loadedRecords=state.loadedFiles.flatMap(f=>f.records); buildModel(); refreshLDList(); toast(`${list.length} ${list.length===1?'LD carregada':'LDs carregadas'} com sucesso.`);
-    } catch(e){console.error(e);toast('Não foi possível ler uma das LDs: '+e.message,'error');}
-    finally{setBusy(false)}
+      for(let i=0; i<list.length; i++){
+        const file = list[i];
+        ldUploadStep(i, 8, 'Lendo arquivo…', 'active');
+        await yieldUI();
+        const book = await parseWorkbook(file);
+        ldUploadStep(i, 45, 'Indexando documentos…', 'active');
+        await yieldUI();
+        await extractLDRecords(book);
+        book.uploadedAt = Date.now();
+        book.size = file.size;
+        book.origin = 'Upload local';
+        computeBookStats(book);
+        state.loadedFiles.push(book);
+        loadedNow.push(book);
+        ldUploadStep(i, 100, `${fmtInt(book.stats.records)} documentos reconhecidos`, 'done');
+        // Render incremental: cada LA aparece assim que termina, sem esperar as demais.
+        state.loadedRecords = state.loadedFiles.flatMap(f=>f.records);
+        renderLDPanel();
+        await yieldUI();
+      }
+      state.modelDirty = true;
+      ensureModel();
+      renderLDPanel();
+      showLDSuccess(loadedNow);
+
+      const msgs = [`${loadedNow.length} ${loadedNow.length===1?'LD carregada':'LDs carregadas'} com sucesso`];
+      if(duplicates.length) msgs.push(`${duplicates.length} duplicada(s) ignorada(s)`);
+      if(rejected) msgs.push(`${rejected} arquivo(s) fora do formato ignorado(s)`);
+      toast(msgs.join(' · ') + '.');
+    } catch(e) {
+      console.error(e);
+      failed = e;
+      const i = loadedNow.length;
+      ldUploadStep(i, 100, 'Falha: ' + e.message, 'error');
+      // Mantém as LDs já lidas com sucesso; apenas a que falhou é descartada.
+      state.loadedRecords = state.loadedFiles.flatMap(f=>f.records);
+      state.modelDirty = true;
+      ensureModel();
+      renderLDPanel();
+      toast('Não foi possível ler uma das LDs: ' + e.message, 'error');
+    } finally {
+      state.ldBusy = false;
+      ldUploadEnd(failed ? 9000 : 1600);
+    }
+  }
+
+  async function reloadLDFiles() {
+    if(state.ldBusy){ toast('Aguarde o carregamento em andamento.','error'); return; }
+    const books = state.loadedFiles.slice();
+    if(!books.length){ toast('Nenhuma LD carregada para atualizar.','error'); return; }
+
+    state.ldBusy = true;
+    ldUploadStart(books.map(b=>({name:b.name,size:b.size})));
+    const rebuilt = [];
+    try {
+      for(let i=0;i<books.length;i++){
+        const old = books[i];
+        ldUploadStep(i, 10, 'Relendo arquivo…', 'active');
+        await yieldUI();
+        const book = await parseWorkbook(old.file);
+        ldUploadStep(i, 50, 'Indexando documentos…', 'active');
+        await yieldUI();
+        await extractLDRecords(book);
+        book.uploadedAt = Date.now();
+        book.size = old.file.size;
+        book.origin = old.origin || 'Upload local';
+        computeBookStats(book);
+        rebuilt.push(book);
+        ldUploadStep(i, 100, `${fmtInt(book.stats.records)} documentos reconhecidos`, 'done');
+      }
+      state.loadedFiles = rebuilt;
+      state.loadedRecords = rebuilt.flatMap(f=>f.records);
+      state.modelDirty = true;
+      ensureModel();
+      renderLDPanel();
+      toast(`${rebuilt.length} ${rebuilt.length===1?'LD atualizada':'LDs atualizadas'} a partir do arquivo original.`);
+    } catch(e) {
+      console.error(e);
+      ldUploadStep(rebuilt.length, 100, 'Falha: ' + e.message, 'error');
+      toast('Não foi possível reler as LDs: ' + e.message + ' Carregue os arquivos novamente.', 'error');
+    } finally {
+      state.ldBusy = false;
+      ldUploadEnd(1600);
+    }
   }
 
   function resolveInput(code) {
@@ -500,7 +938,10 @@
     setBusy(true,`Analisando ${codes.length} código${codes.length!==1?'s':''}…`);
     window._uiProgress?.show(`Preparando modelo para ${codes.length} documentos…`);
     try {
-      buildModel(); const cache=new Map(), out=[];
+      ensureModel();
+      // Zera apenas o pool de sequenciais (barato) em vez de reconstruir todo o modelo.
+      state.model.used = buildSequencePool(state.model.ex);
+      const cache=new Map(), out=[];
       for(let i=0;i<codes.length;i++) {
         if(i%10===0){await yieldUI();window._uiProgress?.set(Math.round(i/codes.length*95),`Analisando ${i+1} de ${codes.length}…`);}
         const raw=codes[i], rec=resolveInput(raw);
@@ -528,9 +969,12 @@
           writable:loadedMatches.length>0
         });
       }
-      state.results=out; renderResults();
+      state.results=out;
       window._uiProgress?.set(100,'Concluído!');
-      setTimeout(()=>{ window._uiOnResults?.(); }, 0);
+      // renderResults() publica tax:results; a camada de apresentação
+      // reage ao evento — não há mais hook manual a esquecer.
+      renderResults();
+      emitSelection();
     } catch(e){console.error(e);toast('Erro durante a análise: '+e.message,'error');window._uiProgress?.hide();}
     finally{setBusy(false)}
   }
@@ -551,28 +995,58 @@
     }
 
     els.resultsBody.innerHTML=rs.map((r,i)=>{
-      const cc=confidenceClass(r.confidence);
-      return `<tr class="${r.found?'':'not-found'}${r.requiresReview?' row-requires-review':''}" data-index="${i}">
-        <td class="col-check"><input class="row-check" type="checkbox" ${r.selected?'checked':''} ${!r.writable||!validTax(r.taxonomy)?'disabled':''}></td>
+      const rowCls=[r.found?'':'not-found', r.requiresReview?'row-requires-review':'', (r.found&&r.confidence>0&&r.confidence<70)?'row-review':''].filter(Boolean).join(' ');
+      return `<tr class="${rowCls}" data-index="${i}">
+        <td class="col-check"><input class="row-check" type="checkbox" aria-label="Selecionar ${escapeHtml(r.code)} para aplicação" ${r.selected?'checked':''} ${!r.writable||!validTax(r.taxonomy)?'disabled':''}></td>
         <td class="col-code"><strong class="doc-code">${escapeHtml(r.code)}</strong></td>
         <td class="col-title"><div class="title-cell"><strong>${escapeHtml(r.title||'—')}</strong><span>${escapeHtml(r.disciplineText||'')}</span></div></td>
         <td class="col-status">${statusBadge(r)}</td>
         <td class="col-current"><div class="current-stack">${r.current?`<span class="tax-current">${escapeHtml(r.current)}</span>`:''}${r.emptyCount>0?`<span class="blank-badge">Em branco${r.matches?.length>1?` · ${r.emptyCount}/${r.matches.length}`:''}</span>`:(!r.current?'<span class="tax-current empty">Vazio</span>':'')}</div></td>
-        <td class="col-suggested">${r.found?`<input class="tax-input" value="${escapeHtml(r.taxonomy)}" spellcheck="false" ${!r.taxonomy?'placeholder="Revisão necessária"':''}>`:'—'}</td>
-        <td class="col-confidence"><span class="confidence-badge ${cc}"><i></i>${confidenceLabel(r.confidence)} · ${r.confidence}%</span></td>
+        <td class="col-suggested">${r.found?`<input class="tax-input" value="${escapeHtml(r.taxonomy)}" spellcheck="false" aria-label="Taxonomia sugerida para ${escapeHtml(r.code)}" ${!r.taxonomy?'placeholder="Revisão necessária"':''}>`:'—'}</td>
+        <td class="col-confidence">
+          <div class="conf-bar cb--${confBarClass(r.confidence)}">
+            <div class="conf-bar-top"><span class="conf-val">${r.confidence}%</span><span class="conf-lbl">${confBarLabel(r.confidence)}</span></div>
+            <div class="conf-track"><div class="conf-track-fill" style="width:${r.confidence}%"></div></div>
+          </div>
+        </td>
         <td class="col-origin"><span class="origin-badge ${r.writable?'loaded':'reference'}">${escapeHtml(r.found?r.origin:'Não encontrado')}</span></td>
         <td class="col-criterion"><div class="criteria">${escapeHtml(r.criterion)}</div></td>
-        <td class="col-action"></td>
+        <td class="col-action"><button type="button" class="btn-evidence" data-evidence="${i}" aria-label="Ver evidências de ${escapeHtml(r.code)}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Ver</button></td>
       </tr>`;
     }).join('');
 
-    els.resultsBody.querySelectorAll('tr').forEach(tr=>{
-      const i=Number(tr.dataset.index), r=state.results[i], chk=tr.querySelector('.row-check'), inp=tr.querySelector('.tax-input');
-      if(chk)chk.addEventListener('change',()=>{r.selected=chk.checked});
-      if(inp)inp.addEventListener('input',()=>{r.taxonomy=inp.value.trim().toUpperCase();inp.value=r.taxonomy;const ok=validTax(r.taxonomy);inp.classList.toggle('invalid',!ok);if(chk){chk.disabled=!r.writable||!ok;if(!ok){chk.checked=false;r.selected=false}}});
-    });
-    // Navigation to sugestoes view is handled by ui.js MutationObserver
+    // Sem listeners por linha: a delegação é registrada uma única vez em bind().
+    emitResults();
   }
+
+  /* Projeção enxuta do estado para a camada de apresentação.
+     ui.js passa a filtrar/ordenar/contar a partir DESTES dados, e não
+     mais relendo o DOM — o que antes dessincronizava a cada re-render. */
+  function emitResults() {
+    emit('tax:results', {
+      rows: state.results.map((r,i)=>({
+        i, code:r.code, title:r.title||'', disciplineText:r.disciplineText||'',
+        status:r.status||'', found:!!r.found, current:r.current||'', taxonomy:r.taxonomy||'',
+        confidence:r.confidence||0, criterion:r.criterion||'', origin:r.origin||'',
+        selected:!!r.selected, writable:!!r.writable, emptyCount:r.emptyCount||0,
+        invalidCount:r.invalidCount||0, requiresReview:!!r.requiresReview,
+        matches:(r.matches||[]).length, details:r.details||null, baseValidation:r.baseValidation||'',
+        // Índice de busca pré-calculado: evita ler textContent de cada <tr>
+        // a cada tecla digitada no campo de pesquisa.
+        search:`${r.code} ${r.title||''} ${r.disciplineText||''} ${r.taxonomy||''} ${r.current||''} ${r.status||''} ${r.origin||''}`.toLowerCase()
+      }))
+    });
+  }
+
+  function emitSelection() {
+    emit('tax:selection', {
+      selected: state.results.filter(r=>r.selected).length,
+      total: state.results.length
+    });
+  }
+
+  function confBarClass(n){ return n>=95?'green':n>=85?'blue':n>=70?'yellow':'red'; }
+  function confBarLabel(n){ return n>=95?'Alta':n>=85?'Boa':n>=70?'Média':'Baixa'; }
 
   function selectApplicable(){for(const r of state.results)r.selected=!!(r.writable&&r.emptyCount>0&&validTax(r.taxonomy)&&!r.requiresReview);renderResults()}
   function analyzeBlankTaxonomies(){
@@ -677,12 +1151,13 @@
     const selected=state.results.filter(r=>r.selected&&r.writable&&validTax(r.taxonomy)); if(!selected.length){toast('Selecione ao menos uma taxonomia aplicável às LDs carregadas.','error');return;}
     setBusy(true,'Aplicando taxonomias e preservando as planilhas…');
     try {
-      const ops=new Map();
+      const ops=new Map(), applied=[];
       for(const r of selected) for(const m of r.matches) {
         // Preencha somente células realmente vazias. Qualquer valor já existente é protegido.
         const existing=String(m.taxonomy||'').trim().toUpperCase();
         if(existing && existing!==r.taxonomy) continue;
         const key=`${m.fileId}|${m.sheetPath}`; if(!ops.has(key))ops.set(key,[]); ops.get(key).push({row:m.row,col:m.taxCol,tax:r.taxonomy});
+        applied.push({rec:m,tax:r.taxonomy});
       }
       if(!ops.size){toast('Nenhuma célula vazia elegível para preenchimento.','error');return;}
       for(const [key,arr] of ops) {
@@ -695,6 +1170,12 @@
       for(const book of state.loadedFiles){if([...ops.keys()].some(k=>k.startsWith(book.id+'|'))){await yieldUI();const bytes=await book.zip.build();const ext=(book.name.match(/\.(xlsx|xlsm)$/i)||['.xlsx'])[0];const base=book.name.slice(0,-ext.length);outputs.push({name:`${base}_TAXONOMIA${ext}`,bytes});}}
       if(outputs.length===1) downloadBlob(new Blob([outputs[0].bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),outputs[0].name);
       else {const zipBytes=buildStoredZip(outputs);downloadBlob(new Blob([zipBytes],{type:'application/zip'}),'Taxonomia_Consag_LDs_atualizadas.zip');}
+      // Reflete a gravação no estado em memória: o painel de LDs, as
+      // estatísticas e uma nova análise passam a ver as células já preenchidas.
+      for(const a of applied){ const src=a.rec._src||a.rec; src.taxonomy=a.tax; a.rec.taxonomy=a.tax; }
+      for(const book of state.loadedFiles) computeBookStats(book);
+      state.modelDirty = true;
+      renderLDPanel();
       toast(`${outputs.length} ${outputs.length===1?'LD atualizada':'LDs atualizadas'} com sucesso.`);
     } catch(e){console.error(e);toast('Falha ao gerar a LD atualizada: '+e.message,'error');}
     finally{setBusy(false)}
@@ -734,23 +1215,71 @@
   }
   async function updateBase(file) {
     if(!file)return;setBusy(true,'Lendo nova base CONSAG…');
-    try{const b=await parseBaseWorkbook(file);state.customBase=b;try{localStorage.setItem('taxonomiaConsag.customBase',JSON.stringify(b))}catch{}buildModel();refreshStats();toast('Nova base CONSAG ativada localmente.');}
+    try{const b=await parseBaseWorkbook(file);state.customBase=b;try{localStorage.setItem('taxonomiaConsag.customBase',JSON.stringify(b))}catch{}state.modelDirty=true;ensureModel();refreshStats();toast('Nova base CONSAG ativada localmente.');}
     catch(e){console.error(e);toast('Não foi possível reconhecer a nova base: '+e.message,'error');}
     finally{setBusy(false);els.baseFile.value=''}
   }
   function loadCustomBase(){try{const raw=localStorage.getItem('taxonomiaConsag.customBase');if(raw)state.customBase=JSON.parse(raw)}catch{state.customBase=null}}
 
+  function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
   function bind() {
     els.codesInput.addEventListener('input',refreshCodeCount); els.clearCodes.onclick=()=>{els.codesInput.value='';refreshCodeCount();els.codesInput.focus()}; els.analyzeBtn.onclick=analyze;
     els.ldFiles.onchange=e=>{loadLDFiles(e.target.files);e.target.value=''};
-    ['dragenter','dragover'].forEach(ev=>els.ldDrop.addEventListener(ev,e=>{e.preventDefault();els.ldDrop.classList.add('drag')}));
-    ['dragleave','drop'].forEach(ev=>els.ldDrop.addEventListener(ev,e=>{e.preventDefault();els.ldDrop.classList.remove('drag')}));
-    els.ldDrop.addEventListener('drop',e=>loadLDFiles(e.dataTransfer.files));
+
+    // Contador de dragenter/dragleave: sem ele, arrastar sobre um filho do
+    // dropzone dispara dragleave e a moldura pisca.
+    let dragDepth = 0;
+    els.ldDrop.addEventListener('dragenter', e => { e.preventDefault(); if(++dragDepth===1) els.ldDrop.classList.add('drag'); });
+    els.ldDrop.addEventListener('dragover',  e => { e.preventDefault(); e.dataTransfer.dropEffect='copy'; });
+    els.ldDrop.addEventListener('dragleave', e => { e.preventDefault(); if(--dragDepth<=0){ dragDepth=0; els.ldDrop.classList.remove('drag'); } });
+    els.ldDrop.addEventListener('drop', e => { e.preventDefault(); dragDepth=0; els.ldDrop.classList.remove('drag'); loadLDFiles(e.dataTransfer.files); });
+
+    // ── Painel de LDs: delegação única, sobrevive a qualquer re-render ──
+    els.ldList.addEventListener('click', e => {
+      const rm = e.target.closest('[data-remove]');
+      if(rm){ removeLD(rm.dataset.remove); return; }
+      const act = e.target.closest('[data-ld-action]');
+      if(!act) return;
+      if(act.dataset.ldAction === 'pick') els.ldFiles.click();
+      if(act.dataset.ldAction === 'clear-search'){ state.ldQuery=''; if(els.ldSearch) els.ldSearch.value=''; renderLDPanel(); }
+    });
+    els.ldSuccess?.addEventListener('click', e => {
+      if(e.target.closest('[data-ld-action="dismiss-success"]')) els.ldSuccess.hidden = true;
+    });
+    els.ldSearch?.addEventListener('input', debounce(e => { state.ldQuery = e.target.value; renderLDPanel(); }, 120));
+    els.ldSort?.addEventListener('change', e => { state.ldSort = e.target.value; renderLDPanel(); });
+    els.ldRefresh?.addEventListener('click', reloadLDFiles);
+    els.ldClearAll?.addEventListener('click', clearAllLDs);
+
+    // ── Tabela de resultados: delegação única em vez de 2 listeners por linha ──
+    els.resultsBody.addEventListener('change', e => {
+      const chk = e.target.closest('.row-check'); if(!chk) return;
+      const r = state.results[Number(chk.closest('tr')?.dataset.index)]; if(!r) return;
+      r.selected = chk.checked; emitSelection();
+    });
+    els.resultsBody.addEventListener('input', e => {
+      const inp = e.target.closest('.tax-input'); if(!inp) return;
+      const tr = inp.closest('tr'); const r = state.results[Number(tr?.dataset.index)]; if(!r) return;
+      r.taxonomy = inp.value.trim().toUpperCase(); inp.value = r.taxonomy;
+      const ok = validTax(r.taxonomy);
+      inp.classList.toggle('invalid', !ok);
+      inp.setAttribute('aria-invalid', ok ? 'false' : 'true');
+      const chk = tr.querySelector('.row-check');
+      if(chk){ chk.disabled = !r.writable || !ok; if(!ok){ chk.checked=false; r.selected=false; } }
+      emitSelection();
+    });
+    els.resultsBody.addEventListener('click', e => {
+      const btn = e.target.closest('[data-evidence]'); if(!btn) return;
+      window._uiEvidence?.(Number(btn.dataset.evidence));
+    });
+
     els.selectAllBtn.onclick=selectApplicable;els.copyBtn.onclick=copyRelation;els.xlsxBtn.onclick=exportXLSX;els.applyBtn.onclick=applyAndDownload;els.blankAnalyzeBtn.onclick=analyzeBlankTaxonomies;els.baseFile.onchange=e=>updateBase(e.target.files[0]);
   }
 
   function init() {
-    loadCustomBase(); buildModel(); refreshStats(); refreshCodeCount(); refreshLDList(); bind();
+    loadCustomBase(); ensureModel(); refreshStats(); refreshCodeCount(); bind(); renderLDPanel();
+    emitResults(); emitSelection();
     console.info(`[Taxonomia Consag] ${state.data.examples?.length||0} exemplos e ${state.data.referenceRecords?.length||0} documentos de referência carregados.`);
   }
   init();
