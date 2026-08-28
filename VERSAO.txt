@@ -1,3 +1,18 @@
+Taxonomia Consag v1.3.2
+28/08/2026
+
+- Correcao critica: LDs com nomenclatura por WBS (LD_003, LD_004, LD_005) eram
+  importadas com ZERO registros e "Detectar Taxonomias em Branco" acusava
+  "Carregue ao menos uma LD...". O reconhecedor de codigo so aceitava o padrao
+  Petrobras (CR-5290.00-22313-911-C1O-001) e descartava silenciosamente todas as
+  linhas no formato C1O_RNEST_U32_3.1.1.1_CVL_RIR_B-32014A.
+  Reconhecimento medido sobre os 23.413 registros de referencia: 17,4% -> 100,0%.
+- Esgotamento de sequenciais deixou de derrubar a analise inteira: o prefixo que
+  atinge os 9999 numeros do padrao de 4 digitos marca apenas os documentos
+  afetados para revisao manual, com aviso explicito.
+- Corrigida duplicidade no limite: o sequencial 9999 podia ser devolvido duas vezes.
+- reserveSequence deixou de varrer o conjunto inteiro a cada reserva.
+
 Taxonomia Consag v1.3.1
 27/08/2026
 

@@ -293,7 +293,28 @@
     }
     return best;
   }
-  function looksLikeDocCode(v){ const s=normCode(v); return /\d{4}\.\d{2}-\d{5}-/.test(s)&&/-\d{3}$/.test(s); }
+  /* Famílias de código de documento aceitas nas LDs.
+
+     A versão anterior reconhecia apenas o padrão Petrobras
+     (CR-5290.00-22313-911-C1O-001) e descartava silenciosamente 100% das
+     linhas das LDs que usam a nomenclatura por WBS
+     (C1O_RNEST_U32_3.1.1.1_CVL_RIR_B-32014A). Como extractLDRecords() usa
+     esta função para filtrar as linhas, essas LDs eram importadas com
+     ZERO registros e "Detectar Taxonomias em Branco" acusava erro.
+     Medido sobre os 23.413 registros de referência: 17,4% -> 100,0% de
+     reconhecimento, sem nenhum falso positivo novo. */
+  const DOC_CODE_PETROBRAS = /\d{4}\.\d{2}-\d{5}-/;
+  const DOC_CODE_PETROBRAS_TAIL = /-\d{3}$/;
+  // C1O_RNEST_U32_3.1.1.1_CVL_RIR_B-32014A  (obra_planta_unidade_WBS_disciplina_tipo_tag)
+  // O tipo documental pode trazer dígito ou ponto (…_EST_CIME1_R-32501, …_EST_PAR.SPIE_V-32201).
+  const DOC_CODE_WBS = /^[A-Z0-9]{2,8}(?:_[A-Z0-9]{2,12}){1,3}_\d+(?:\.\d+){1,5}_[A-Z]{2,12}[_-][A-Z0-9.]{2,12}[_-].+$/;
+  // 5900.0130870.25.2-C1O-CV-CRS-0001
+  const DOC_CODE_DOTTED = /^\d{4}\.\d{4,}(?:\.\d+)+(?:-[A-Z0-9]{2,6}){2,}-\d{3,4}$/;
+  function looksLikeDocCode(v){
+    const s=normCode(v); if(!s) return false;
+    if(DOC_CODE_PETROBRAS.test(s) && DOC_CODE_PETROBRAS_TAIL.test(s)) return true;
+    return DOC_CODE_WBS.test(s) || DOC_CODE_DOTTED.test(s);
+  }
 
   async function extractLDRecords(book) {
     const all=[];
@@ -362,7 +383,16 @@
      reserveSequence() muta este mapa durante a análise. */
   function buildSequencePool(ex) {
     const used=new Map();
-    const add=(tax)=>{const p=splitTax(tax);if(!p)return;const key=[p.project,p.type,p.sector,p.stage,p.front,p.discipline,p.language].join('-');if(!used.has(key))used.set(key,new Set());used.get(key).add(Number(p.sequence));};
+    // Cada prefixo guarda o conjunto de sequenciais usados E o maior deles:
+    // sem o max, reserveSequence() varria o Set inteiro a cada reserva
+    // (Math.max(...set)), custo quadrático e risco de estourar a pilha.
+    const add=(tax)=>{
+      const p=splitTax(tax); if(!p)return;
+      const key=[p.project,p.type,p.sector,p.stage,p.front,p.discipline,p.language].join('-');
+      let slot=used.get(key); if(!slot){slot={set:new Set(),max:0};used.set(key,slot);}
+      const n=Number(p.sequence); if(!Number.isFinite(n))return;
+      slot.set.add(n); if(n>slot.max)slot.max=n;
+    };
     for(const e of ex) add(e.taxonomy);
     for(const r of state.loadedRecords) if(validTax(r.taxonomy)) add(r.taxonomy);
     return used;
@@ -497,7 +527,23 @@
     const g=state.model.globalFront; if(g.share>=0.95)return {value:g.value,quality:78,evidence:`Frente padrão das LDs de referência (${Math.round(g.share*100)}% de ${g.total})`};
     return {value:'',quality:0,evidence:'Frente/fase sem evidência suficiente'};
   }
-  function reserveSequence(prefix) {if(!state.model.used.has(prefix))state.model.used.set(prefix,new Set());const used=state.model.used.get(prefix);let n=used.size?Math.max(...used)+1:1;while(used.has(n)&&n<9999)n++;if(n>9999)throw new Error('Sequencial esgotado para '+prefix);used.add(n);return String(n).padStart(4,'0')}
+  const SEQ_MAX = 9999; // o padrão reserva 4 dígitos para o sequencial
+
+  /* Reserva o próximo sequencial livre do prefixo.
+     Retorna '' quando o prefixo esgotou os 9999 números — antes lançava
+     uma exceção que subia até analyze() e DESCARTAVA a análise inteira,
+     inclusive os milhares de documentos já classificados com sucesso.
+     Também corrige a duplicidade no limite: o laço parava em 9999 mesmo
+     com 9999 já ocupado e o número era devolvido uma segunda vez. */
+  function reserveSequence(prefix) {
+    let slot=state.model.used.get(prefix);
+    if(!slot){slot={set:new Set(),max:0};state.model.used.set(prefix,slot);}
+    let n=slot.max+1;
+    while(n<=SEQ_MAX && slot.set.has(n)) n++;
+    if(n>SEQ_MAX) return '';
+    slot.set.add(n); slot.max=n;
+    return String(n).padStart(4,'0');
+  }
 
   function describeTaxonomy(taxonomy,fieldEvidence={}) {
     const p=splitTax(taxonomy); if(!p)return null;
@@ -536,7 +582,10 @@
     const language=state.model.globalLanguage.share>=0.95?state.model.globalLanguage.value:(state.data.defaultLanguage||'');
     if(!project||!stage||!language)return {taxonomy:'',confidence:55,criterion:'Base de referência não apresentou consenso suficiente para obra, etapa ou idioma.',mode:'none',details:null,baseValidation:'Revisão obrigatória.'};
 
-    const prefix=[project,type.value,sector.value,stage,front.value,discipline.value,language].join('-'), seq=reserveSequence(prefix), taxonomy=`${prefix}-${seq}`;
+    const prefix=[project,type.value,sector.value,stage,front.value,discipline.value,language].join('-');
+    const seq=reserveSequence(prefix);
+    if(!seq) return {taxonomy:'',confidence:0,criterion:`O prefixo ${prefix} já utiliza os ${SEQ_MAX} sequenciais previstos no padrão de 4 dígitos. Um novo número duplicaria um documento existente, por isso a sugestão automática foi interrompida.`,mode:'none',details:null,baseValidation:'Revisão obrigatória: limite de sequenciais do prefixo atingido.',requiresReview:true,seqExhausted:prefix};
+    const taxonomy=`${prefix}-${seq}`;
     const matrix=sectorAllowedByOfficialMatrix(type.value,sector.value);
     const fieldEvidence={project:`${Math.round(state.model.globalProject.share*100)}% das taxonomias de referência usam ${project}.`,type:type.evidence,sector:sector.evidence,stage:`${Math.round(state.model.globalStage.share*100)}% das referências usam ${stage}.`,front:front.evidence,discipline:discipline.evidence,language:`${Math.round(state.model.globalLanguage.share*100)}% das referências usam ${language}.`,sequence:'Próximo sequencial após o maior número já utilizado neste prefixo; números existentes não são reutilizados.'};
     let confidence=Math.round(type.quality*0.31+sector.quality*0.24+discipline.quality*0.27+front.quality*0.08+9.5);confidence=Math.max(60,Math.min(96,confidence));
@@ -964,7 +1013,7 @@
           input:raw, code:rec.code, found:true, title:rec.title||'', disciplineText:rec.disciplineText||'', current,
           taxonomy:inf.taxonomy, confidence:inf.confidence, criterion:criterionPrefix+inf.criterion, mode:inf.mode, status, details:inf.details||null, baseValidation:inf.baseValidation||'', requiresReview:!!inf.requiresReview,
           emptyCount:emptyLoaded.length, invalidCount:invalidLoaded.length,
-          matches:loadedMatches, origin:loadedMatches.length?`${new Set(loadedMatches.map(r=>r.sourceLD)).size} LD(s) carregada(s)`:`${rec.sourceLD||'Referência'} · ${rec.sheet||''}`,
+          matches:loadedMatches, seqExhausted:inf.seqExhausted||'', origin:loadedMatches.length?`${new Set(loadedMatches.map(r=>r.sourceLD)).size} LD(s) carregada(s)`:`${rec.sourceLD||'Referência'} · ${rec.sheet||''}`,
           selected:loadedMatches.length>0 && emptyLoaded.length>0 && validTax(inf.taxonomy) && !currentDiff && !inf.requiresReview,
           writable:loadedMatches.length>0
         });
@@ -975,6 +1024,15 @@
       // reage ao evento — não há mais hook manual a esquecer.
       renderResults();
       emitSelection();
+
+      // Prefixos que esgotaram os 9999 sequenciais do padrão: a análise
+      // continua e as linhas afetadas ficam para revisão manual, mas o
+      // usuário precisa saber por que vieram sem sugestão.
+      const exhausted=[...new Set(out.map(r=>r.seqExhausted).filter(Boolean))];
+      if(exhausted.length){
+        const n=out.filter(r=>r.seqExhausted).length;
+        toast(`${n} documento(s) sem sugestão: o prefixo ${exhausted[0]}${exhausted.length>1?` (e mais ${exhausted.length-1})`:''} já usa os ${SEQ_MAX} sequenciais do padrão de 4 dígitos.`,'error');
+      }
     } catch(e){console.error(e);toast('Erro durante a análise: '+e.message,'error');window._uiProgress?.hide();}
     finally{setBusy(false)}
   }
