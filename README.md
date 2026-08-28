@@ -86,3 +86,49 @@ O DOM deixou de ser usado como transporte de estado entre as duas camadas:
 - Delegação de eventos: a tabela não cria mais dois listeners por linha.
 - Análise de 8.000 códigos ~3,6x mais rápida, com saída de classificação idêntica.
 - Responsividade (o CSS não possuía nenhuma media query) e acessibilidade.
+
+
+## Correção v1.3.2 — LDs com nomenclatura por WBS não eram lidas
+
+### Sintoma
+Ao carregar as LDs 03, 04 e 05, o painel mostrava **"0 registros"** e o botão
+**Detectar Taxonomias em Branco** respondia *"Carregue ao menos uma LD para detectar
+Taxonomias em branco"* — justamente as LDs que têm 100% da coluna Taxonomia em branco.
+
+### Causa raiz
+`looksLikeDocCode()` reconhecia apenas o padrão Petrobras
+(`CR-5290.00-22313-911-C1O-001`). Como `extractLDRecords()` usa essa função para
+decidir quais linhas da planilha são documentos, todas as linhas no formato por WBS
+(`C1O_RNEST_U32_3.1.1.1_CVL_RIR_B-32014A`) eram descartadas em silêncio — a LD era
+importada com zero registros.
+
+Medido sobre os 23.413 registros de referência embutidos:
+
+| LD | registros | reconhecidos antes | depois |
+|----|-----------|--------------------|--------|
+| LD_001 | 3.836 | 3.652 | 3.836 |
+| LD_002 | 423 | 423 | 423 |
+| LD_003 | 17.094 | **0** | 17.092 |
+| LD_004 | 1.871 | **0** | 1.871 |
+| LD_005 | 189 | **0** | 189 |
+| **total** | **23.413** | **17,4%** | **100,0%** |
+
+Os 2 restantes têm `/` no código (`..._U32-VENT-T31004/V`); o `normCode()` trata a
+barra como separador de caminho e trunca o valor. É comportamento pré-existente da
+normalização usada por todo o motor de correspondência e não foi alterado aqui.
+
+### Também corrigido
+Com as LDs finalmente sendo lidas, um segundo defeito ficava alcançável: um prefixo
+taxonômico que atinge os **9999** sequenciais do padrão de 4 dígitos fazia
+`reserveSequence()` lançar exceção, que subia até `analyze()` e **descartava a análise
+inteira** — inclusive os milhares de documentos já classificados. Agora os documentos
+afetados são marcados para revisão manual, com aviso explícito, e o restante da
+análise é preservado. Também foi corrigida a duplicidade no limite (o número 9999
+podia ser devolvido duas vezes) e a varredura do conjunto a cada reserva.
+
+### Limitação conhecida
+Nas LDs 03/04/05, cerca de 73% dos documentos voltam sem sugestão automática
+("Revisão obrigatória"). Isso **não é um defeito**: são as travas do classificador,
+que se recusa a inferir tipo, disciplina ou setor sem evidência suficiente. Essas LDs
+não possuem nenhuma taxonomia própria e usam uma família de códigos distinta das LDs
+de referência que possuem taxonomia validada.
