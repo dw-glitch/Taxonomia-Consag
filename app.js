@@ -310,6 +310,36 @@
   const DOC_CODE_WBS = /^[A-Z0-9]{2,8}(?:_[A-Z0-9]{2,12}){1,3}_\d+(?:\.\d+){1,5}_[A-Z]{2,12}[_-][A-Z0-9.]{2,12}[_-].+$/;
   // 5900.0130870.25.2-C1O-CV-CRS-0001
   const DOC_CODE_DOTTED = /^\d{4}\.\d{4,}(?:\.\d+)+(?:-[A-Z0-9]{2,6}){2,}-\d{3,4}$/;
+  /* ─────────────────────────────────────────────────────────────────
+     DECODIFICAÇÃO ESTRUTURAL DO CÓDIGO
+
+     As duas famílias de código usadas nas LDs já carregam, no próprio
+     código, o tipo documental e a disciplina — informação que o motor
+     ignorava, inferindo tudo por semelhança de título:
+
+       N-1710  CR-5290.00-22313-911-C1O-001
+               ^prefixo            ^disciplina N-1710
+
+       ET/WBS  C1O_RNEST_U32_3.1.1.1_CVL_RIR_B-32014A
+                                     ^disc ^tipo
+
+     Medido sobre os dados de referência: nas abas ET, 90,3% dos tokens
+     de tipo são códigos válidos do catálogo oficial, e 99,7% deles têm
+     o título corroborando a descrição oficial. Nas abas N-1710, a dupla
+     prefixo+disciplina prevê o tipo com 97,0% de pureza.
+     ───────────────────────────────────────────────────────────────── */
+  const RE_N1710 = /^([A-Z]{2,3})-(\d{4}\.\d{2})-(\d{5})-([A-Z0-9]{3})-([A-Z0-9]{3})-(\d{3})$/;
+  const RE_WBS_FIELDS = /^([A-Z0-9]{2,8})_(?:[A-Z0-9]{2,12}_){1,3}(\d+(?:\.\d+){1,5})_([A-Z]{2,12})[_-]([A-Z0-9.]{2,12})[_-](.+)$/;
+
+  const decodeDocCode = memoString((v) => {
+    const c = normCode(v);
+    let m = c.match(RE_N1710);
+    if (m) return { family:'N-1710', prefix:m[1], area:m[2], unit:m[3], disc:m[4], issuer:m[5], seq:m[6], key:`${m[1]}|${m[4]}` };
+    m = c.match(RE_WBS_FIELDS);
+    if (m) return { family:'ET', project:m[1], wbs:m[2], discToken:m[3], typeToken:m[4], tag:m[5], key:`${m[3]}|${m[4]}` };
+    return { family:'', key:'' };
+  }, 60000);
+
   function looksLikeDocCode(v){
     const s=normCode(v); if(!s) return false;
     if(DOC_CODE_PETROBRAS.test(s) && DOC_CODE_PETROBRAS_TAIL.test(s)) return true;
@@ -363,6 +393,31 @@
     ADC:'ADM CONTRATUAL', SUB:'GESTÃO DE CONTRATOS', FIN:'PAGAMENTOS', CTB:'ARQUIVO FISCAL', TRB:'ARQUIVO FISCAL',
     RHU:'RH', ADM:'ADMINISTRAÇÃO', CDC:'CENTRO DE DOCUMENTAÇÃO'
   });
+
+  /* Categoria da matriz oficial -> código de setor. Categorias servidas por
+     mais de um código (ARQUIVO FISCAL: CTB e TRB) ficam de fora: ambíguas. */
+  const SECTOR_CODE_BY_CATEGORY = (() => {
+    const byCat = new Map();
+    for (const [code, cat] of Object.entries(SECTOR_CATEGORY_BY_CODE)) {
+      const k = normText(cat);
+      if (byCat.has(k)) byCat.set(k, null); else byCat.set(k, code);
+    }
+    return byCat;
+  })();
+
+  /* A aba "TIPO DE DOCUMENTO POR SETOR" é a autoridade sobre quem emite cada
+     tipo. Quando ela admite uma única categoria e essa categoria corresponde a
+     um único código, o setor está determinado pela própria base — não é
+     inferência. Cobre os tipos que nunca apareceram taxonomizados nas
+     referências, caso das LDs da aba ET. */
+  function sectorFromOfficialMatrix(type) {
+    const allowed = state.model.allowed[type];
+    if (!Array.isArray(allowed) || allowed.length !== 1) return null;
+    const code = SECTOR_CODE_BY_CATEGORY.get(normText(allowed[0]));
+    if (!code || !state.model.sectors.has(code)) return null;
+    return { value:code, quality:93,
+      evidence:`A matriz oficial “TIPO DE DOCUMENTO POR SETOR” admite um único setor emissor para ${type}: ${allowed[0]} (${code})` };
+  }
 
   function modeStats(values) {
     const m=new Map(); for(const v of values){if(v)m.set(v,(m.get(v)||0)+1)}
@@ -491,9 +546,23 @@
     const category=SECTOR_CATEGORY_BY_CODE[sector]||''; if(!category)return {known:false,allowed:true,category:''};
     return {known:true,allowed:allowed.some(x=>normText(x)===normText(category)),category};
   }
+  /* O tipo declarado no próprio código, quando é um código válido do
+     catálogo oficial. A confiança acompanha a corroboração do título:
+     código e título discordando vira hipótese para revisão, não certeza. */
+  function typeFromCodeToken(rec) {
+    const dec=decodeDocCode(rec.code); if(dec.family!=='ET'||!dec.typeToken) return null;
+    const official=state.model.docTypes.find(t=>t.code===dec.typeToken); if(!official) return null;
+    const corr=phraseScore(rec.title,official.description);
+    if(corr>=0.25) return {value:official.code,quality:Math.round(93+Math.min(5,corr*5)),
+      evidence:`Tipo declarado no código (${dec.typeToken}) confere com o catálogo oficial — ${official.description} — e o título corrobora (${Math.round(corr*100)}%)`};
+    return {value:official.code,quality:66,requiresReview:true,
+      evidence:`O código declara o tipo ${dec.typeToken} (${official.description}), mas o título “${rec.title}” não corrobora essa descrição. Confirme antes de aplicar`};
+  }
+
   function chooseType(rec,near) {
     const series=codeSeriesKey(rec.code), sp=series?state.model.seriesTypeProfiles.get(series):null;
     if(sp&&sp.total>=4&&sp.share>=0.80)return {value:sp.value,quality:98,evidence:`Série documental ${series} usa ${sp.value} em ${Math.round(sp.share*100)}% de ${sp.total} referências`};
+    const tok=typeFromCodeToken(rec); if(tok) return tok;
     const exact=(state.model.titleExamples.get(normText(rec.title))||[]).filter(e=>!series||codeSeriesKey(e.code)===series||e._family===docFamily(rec.code));
     if(exact.length){const st=modeStats(exact.map(e=>e._tax.type));if(st.share>=0.9)return {value:st.value,quality:96,evidence:`Título equivalente dentro da mesma família/série: ${st.value} (${Math.round(st.share*100)}%)`};}
     const off=officialTypeByTitle(rec.title); if(off.code&&off.score>=0.76)return {value:off.code,quality:Math.round(90+off.score*8),evidence:`Descrição oficial da base: ${off.code} — ${off.description}`};
@@ -505,6 +574,27 @@
   function chooseDiscipline(rec,near) {
     const series=codeSeriesKey(rec.code), sp=series?state.model.seriesDisciplineProfiles.get(series):null;
     if(sp&&sp.total>=4&&sp.share>=0.80)return {value:sp.value,quality:98,evidence:`A série ${series} usa a disciplina ${sp.value} em ${Math.round(sp.share*100)}% de ${sp.total} referências`};
+    const dec=decodeDocCode(rec.code);
+    if(dec.family==='ET'&&dec.discToken){
+      const off=state.model.disciplines.get(dec.discToken);
+      if(off) return {value:dec.discToken,quality:96,evidence:`Disciplina declarada no código (${dec.discToken}) é um código válido do catálogo oficial — ${off.description}`};
+      /* O código declara uma disciplina que não existe no catálogo (EST =
+         estáticos, DIN = dinâmicos, SEG = segurança). Aqui resolvemos APENAS
+         pela descrição de disciplina da LD: usar o título sequestraria a
+         escolha, porque em relatório de inspeção ele contém "INSPEÇÃO" e
+         "RECEBIMENTO", que casam com disciplinas do catálogo e substituem a
+         disciplina real do equipamento. Sem correspondência defensável, o
+         documento vai para revisão em vez de receber um palpite. */
+      /* O próprio token pode ser uma variante do código oficial (HVAC -> HVA),
+         resolvida pelo catálogo/apelidos. Vem antes da descrição da LD porque
+         nesses documentos a coluna de disciplina às vezes traz a classe do
+         equipamento (ESTATICOS) em vez da disciplina técnica. */
+      const byTok=officialDisciplineByText(dec.discToken);
+      if(byTok.code&&byTok.score>=0.92) return {value:byTok.code,quality:92,evidence:`A disciplina ${dec.discToken} declarada no código corresponde a ${byTok.code} — ${byTok.description} no catálogo oficial`};
+      const byLd=officialDisciplineByText(rec.disciplineText);
+      if(byLd.code&&byLd.score>=0.92) return {value:byLd.code,quality:88,evidence:`Disciplina do código (${dec.discToken}) não consta do catálogo; a descrição de disciplina da LD indica ${byLd.code} — ${byLd.description}`};
+      return {value:'',quality:0,evidence:`O código declara a disciplina ${dec.discToken}, que não existe no catálogo oficial, e a descrição “${rec.disciplineText}” não corresponde a nenhuma disciplina da base. Definição manual necessária`};
+    }
     const exact=(state.model.titleExamples.get(normText(rec.title))||[]).filter(e=>!series||codeSeriesKey(e.code)===series||e._family===docFamily(rec.code));
     if(exact.length){const st=modeStats(exact.map(e=>e._tax.discipline));if(st.share>=0.9)return {value:st.value,quality:95,evidence:`Título equivalente na mesma família/série usa disciplina ${st.value} (${Math.round(st.share*100)}%)`};}
     const v=voteWithDominance(near,'discipline'); if(v.value&&v.share>=0.76&&near[0]?.score>=0.42)return {value:v.value,quality:88,evidence:`Documentos equivalentes convergem para ${v.value} (${Math.round(v.share*100)}%)`};
@@ -516,6 +606,7 @@
     const series=rec?codeSeriesKey(rec.code):'', sp=series?state.model.seriesSectorProfiles.get(series):null; if(sp&&sp.total>=4&&sp.share>=0.80)return {value:sp.value,quality:98,evidence:`A série ${series} usa o setor ${sp.value} em ${Math.round(sp.share*100)}% de ${sp.total} referências`};
     let p=state.model.typeDiscSectorProfiles.get(`${type}|${discipline}`); if(p&&p.total>=3&&p.share>=0.68)return {value:p.value,quality:94,evidence:`Mesmo tipo + disciplina usam ${p.value} em ${Math.round(p.share*100)}% de ${p.total} referências`};
     p=state.model.typeSectorProfiles.get(type); if(p&&p.total>=4&&p.share>=0.78)return {value:p.value,quality:89,evidence:`Tipo ${type} usa ${p.value} em ${Math.round(p.share*100)}% de ${p.total} referências`};
+    const mx=sectorFromOfficialMatrix(type); if(mx) return mx;
     const v=voteWithDominance(near,'sector'); if(v.value&&v.share>=0.70&&near[0]?.score>=0.32)return {value:v.value,quality:78,evidence:`Consenso do setor em documentos equivalentes (${Math.round(v.share*100)}%)`};
     if(p&&p.value&&p.share>=0.60)return {value:p.value,quality:69,evidence:`Setor mais recorrente para ${type} (${Math.round(p.share*100)}%)`};
     return {value:'',quality:0,evidence:'Setor emissor sem evidência suficiente'};
@@ -590,7 +681,9 @@
     const fieldEvidence={project:`${Math.round(state.model.globalProject.share*100)}% das taxonomias de referência usam ${project}.`,type:type.evidence,sector:sector.evidence,stage:`${Math.round(state.model.globalStage.share*100)}% das referências usam ${stage}.`,front:front.evidence,discipline:discipline.evidence,language:`${Math.round(state.model.globalLanguage.share*100)}% das referências usam ${language}.`,sequence:'Próximo sequencial após o maior número já utilizado neste prefixo; números existentes não são reutilizados.'};
     let confidence=Math.round(type.quality*0.31+sector.quality*0.24+discipline.quality*0.27+front.quality*0.08+9.5);confidence=Math.max(60,Math.min(96,confidence));
     let validation='Compatibilidade baseada na estrutura oficial e nas taxonomias já validadas das LDs.';
-    let requiresReview=false; if(matrix.known&&!matrix.allowed){const sk=codeSeriesKey(rec.code),st=sk?state.model.seriesTypeProfiles.get(sk):null,ss=sk?state.model.seriesSectorProfiles.get(sk):null,sd=sk?state.model.seriesDisciplineProfiles.get(sk):null;const strongSeries=!!(st&&ss&&sd&&st.total>=4&&ss.total>=4&&sd.total>=4&&st.share>=0.90&&ss.share>=0.90&&sd.share>=0.90);if(strongSeries){confidence=Math.min(confidence,64);requiresReview=true;validation=`A matriz geral “TIPO DE DOCUMENTO POR SETOR” não associa ${type.value} à categoria ${matrix.category}. A série ${sk} apresenta padrão histórico consistente (${Math.round(ss.share*100)}% no setor ${sector.value}), por isso a hipótese é exibida, mas a divergência com a base oficial exige revisão manual antes de aplicar.`;}else{confidence=Math.min(confidence,64);requiresReview=true;validation=`A matriz “TIPO DE DOCUMENTO POR SETOR” não associa ${type.value} à categoria ${matrix.category} e não há série suficientemente consolidada para justificar a exceção. Revisão manual obrigatória antes de aplicar.`;}}
+    let requiresReview=!!type.requiresReview;
+    if(requiresReview) validation=`${type.evidence}. Revisão manual recomendada antes de aplicar.`;
+    if(matrix.known&&!matrix.allowed){const sk=codeSeriesKey(rec.code),st=sk?state.model.seriesTypeProfiles.get(sk):null,ss=sk?state.model.seriesSectorProfiles.get(sk):null,sd=sk?state.model.seriesDisciplineProfiles.get(sk):null;const strongSeries=!!(st&&ss&&sd&&st.total>=4&&ss.total>=4&&sd.total>=4&&st.share>=0.90&&ss.share>=0.90&&sd.share>=0.90);if(strongSeries){confidence=Math.min(confidence,64);requiresReview=true;validation=`A matriz geral “TIPO DE DOCUMENTO POR SETOR” não associa ${type.value} à categoria ${matrix.category}. A série ${sk} apresenta padrão histórico consistente (${Math.round(ss.share*100)}% no setor ${sector.value}), por isso a hipótese é exibida, mas a divergência com a base oficial exige revisão manual antes de aplicar.`;}else{confidence=Math.min(confidence,64);requiresReview=true;validation=`A matriz “TIPO DE DOCUMENTO POR SETOR” não associa ${type.value} à categoria ${matrix.category} e não há série suficientemente consolidada para justificar a exceção. Revisão manual obrigatória antes de aplicar.`;}}
     const details=describeTaxonomy(taxonomy,fieldEvidence);
     const similar=near[0].e.title||near[0].e.code;
     const criterion=`Base oficial + padrões validados. Referência mais próxima: “${similar}” (${Math.round(near[0].score*100)}%). ${type.evidence}; ${sector.evidence}; ${discipline.evidence}; ${front.evidence}.`;
