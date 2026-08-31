@@ -274,21 +274,41 @@
   }
   const HEADER_CODE = ['CODIGO DO DOCUMENTO','CÓDIGO DO DOCUMENTO','CODIGO DOCUMENTO','CÓDIGO DOCUMENTO','CODIGO','CÓDIGO','DOCUMENTO','N DOCUMENTO','NUMERO DO DOCUMENTO','NÚMERO DO DOCUMENTO'];
   const HEADER_TITLE = ['TITULO','TÍTULO','TITULO DO DOCUMENTO','TÍTULO DO DOCUMENTO','DESCRICAO','DESCRIÇÃO'];
-  const HEADER_DISC = ['DISCIPLINA','DISCIPLINA DO DOCUMENTO','SETOR EMISSOR','EMISSOR','SETOR'];
+  /* DISCIPLINA e SETOR são segmentos DIFERENTES da taxonomia (6º e 3º).
+     Antes os dois viviam na mesma lista e a primeira coluna encontrada
+     vencia: numa LD com as duas colunas, o setor era lido como disciplina
+     e a coluna de disciplina era ignorada por completo. */
+  const HEADER_DISC   = ['DISCIPLINA','DISCIPLINA DO DOCUMENTO','DISCIPLINA TECNICA','DISCIPLINA TÉCNICA'];
+  const HEADER_SECTOR = ['SETOR','SETOR EMISSOR','EMISSOR','AREA EMISSORA','ÁREA EMISSORA','DEPARTAMENTO','SETOR RESPONSAVEL','SETOR RESPONSÁVEL'];
+  const HEADER_FRONT  = ['FRENTE','FRENTE DE SERVICO','FRENTE DE SERVIÇO','FASE DA PROPOSTA','SISTEMA'];
+  const HEADER_STAGE  = ['ETAPA','FASE','ETAPA DO PROJETO','FASE DO PROJETO'];
+  const HEADER_PROJ   = ['OBRA','EMPREENDIMENTO','ESTUDO','AG','OBRA ESTUDO AG'];
+  const HEADER_LANG   = ['IDIOMA','LINGUA','LÍNGUA','LANGUAGE'];
+
   function findHeader(rows,shared) {
     let best=null;
+    const has=(list,v)=>list.map(normText).includes(v);
     for(const row of rows.slice(0,80)) {
       const vals=rowValues(row,shared), norm=new Map([...vals].map(([k,v])=>[k,normText(v)]));
-      let taxCol='', codeCol='', titleCol='', discCol='';
+      let taxCol='', codeCol='', titleCol='', discCol='', sectorCol='', frontCol='', stageCol='', projCol='', langCol='';
+      // Cabeçalho de TODAS as colunas: a linha inteira passa a ser preservada,
+      // não só as quatro que o motor consumia.
+      const headers=new Map();
       for(const [c,v] of norm) {
+        if(v) headers.set(c,v);
         if(v==='TAXONOMIA'||v.includes('TAXONOMIA')) taxCol=c;
-        if(!codeCol && HEADER_CODE.map(normText).includes(v)) codeCol=c;
-        if(!titleCol && HEADER_TITLE.map(normText).includes(v)) titleCol=c;
-        if(!discCol && HEADER_DISC.map(normText).includes(v)) discCol=c;
+        if(!codeCol   && has(HEADER_CODE,v))   codeCol=c;
+        if(!titleCol  && has(HEADER_TITLE,v))  titleCol=c;
+        if(!discCol   && has(HEADER_DISC,v))   discCol=c;
+        if(!sectorCol && has(HEADER_SECTOR,v)) sectorCol=c;
+        if(!frontCol  && has(HEADER_FRONT,v))  frontCol=c;
+        if(!stageCol  && has(HEADER_STAGE,v))  stageCol=c;
+        if(!projCol   && has(HEADER_PROJ,v))   projCol=c;
+        if(!langCol   && has(HEADER_LANG,v))   langCol=c;
       }
       if(taxCol) {
-        const score=(codeCol?4:0)+(titleCol?2:0)+(discCol?1:0);
-        if(!best||score>best.score) best={row:Number(row.getAttribute('r')||0),taxCol,codeCol,titleCol,discCol,score};
+        const score=(codeCol?4:0)+(titleCol?2:0)+(discCol?1:0)+(sectorCol?1:0)+(frontCol?1:0)+(stageCol?1:0);
+        if(!best||score>best.score) best={row:Number(row.getAttribute('r')||0),taxCol,codeCol,titleCol,discCol,sectorCol,frontCol,stageCol,projCol,langCol,headers,score};
       }
     }
     return best;
@@ -365,9 +385,20 @@
       for(const row of rows) {
         const rn=Number(row.getAttribute('r')||0); if(rn<=head.row) continue;
         const vals=rowValues(row,book.shared); const rawCode=vals.get(codeCol)||''; if(!looksLikeDocCode(rawCode)) continue;
+        const cell=(col)=>col?String(vals.get(col)||'').trim():'';
+        // Preserva a linha inteira: qualquer coluna com cabeçalho vira evidência
+        // disponível. Antes só quatro colunas sobreviviam à importação.
+        const fields={};
+        if(head.headers) for(const [col,name] of head.headers){ const v=cell(col); if(v) fields[name]=v; }
+        const discText=cell(head.discCol), sectorText=cell(head.sectorCol);
         const rec={
-          code:normCode(rawCode), rawCode:String(rawCode).trim(), title:head.titleCol?String(vals.get(head.titleCol)||'').trim():'',
-          disciplineText:head.discCol?String(vals.get(head.discCol)||'').trim():'', taxonomy:String(vals.get(head.taxCol)||'').trim().toUpperCase(),
+          code:normCode(rawCode), rawCode:String(rawCode).trim(), title:cell(head.titleCol),
+          // Sem coluna de disciplina, a de setor ainda serve de pista — era o
+          // comportamento anterior e as LDs que só têm "SETOR" dependem dele.
+          disciplineText:discText||sectorText,
+          sectorText, frontText:cell(head.frontCol), stageText:cell(head.stageCol),
+          projectText:cell(head.projCol), languageText:cell(head.langCol),
+          fields, taxonomy:String(vals.get(head.taxCol)||'').trim().toUpperCase(),
           sourceLD:book.name, sheet:sheet.name, row:rn, taxCol:head.taxCol, sheetPath:sheet.path, fileId:book.id, loaded:true
         };
         all.push(rec); book.records.push(rec);
@@ -541,6 +572,38 @@
     for(const n of neighbors){const val=n.e._tax[field];if(!val||filter&&!filter(val))continue;const w=Math.pow(Math.max(n.score,0.01),3);votes.set(val,(votes.get(val)||0)+w)}
     const arr=[...votes].sort((a,b)=>b[1]-a[1]),total=arr.reduce((s,x)=>s+x[1],0);return {value:arr[0]?.[0]||'',share:total?(arr[0]?.[1]||0)/total:0,total};
   }
+  /* Resolve o valor de uma coluna da LD contra um catálogo oficial.
+     Exige correspondência exata ou quase — o valor vem de uma coluna
+     rotulada, então "parecido" não basta: aceitar aproximação aqui seria
+     adivinhar com a aparência de evidência. Medição que motivou o rigor:
+     casar catálogo com o TÍTULO livre acerta só 42% para frente, 0% para
+     obra e nunca dispara para etapa, então o título não alimenta estes
+     segmentos — apenas colunas explicitamente rotuladas. */
+  function matchCatalog(map, text) {
+    const n = normText(text); if(!n) return null;
+    const up = String(text||'').trim().toUpperCase();
+    if(map.has(up)) return {code:up, score:1, description:map.get(up).description, how:'é o código oficial'};
+    let best={code:'',score:0,description:''};
+    for(const [code,x] of map){
+      const dn=normText(x.description); if(!dn) continue;
+      let sc;
+      if(dn===n) sc=1;
+      else if(dn.length>=5 && n.includes(dn)) sc=0.97;
+      else if(n.length>=5 && dn.includes(n)) sc=0.93;
+      else sc=jaccard(new Set(descriptionTokens(n)), new Set(descriptionTokens(dn)));
+      if(sc>best.score) best={code,score:sc,description:x.description};
+    }
+    return best.score>=0.90 ? {...best, how:'corresponde à descrição do catálogo'} : null;
+  }
+
+  /* Evidência declarada numa coluna da própria LD. */
+  function fromColumn(map, text, label) {
+    if(!text) return null;
+    const m = matchCatalog(map, text);
+    if(!m) return null;
+    return {value:m.code, quality:97, evidence:`A coluna ${label} da LD traz “${String(text).trim()}”, que ${m.how} ${m.code} — ${m.description}`};
+  }
+
   function sectorAllowedByOfficialMatrix(type,sector) {
     const allowed=state.model.allowed[type]; if(!Array.isArray(allowed)||!allowed.length)return {known:false,allowed:true,category:''};
     const category=SECTOR_CATEGORY_BY_CODE[sector]||''; if(!category)return {known:false,allowed:true,category:''};
@@ -603,6 +666,7 @@
     return {value:'',quality:0,evidence:'Disciplina sem evidência suficiente na base/LD'};
   }
   function chooseSector(type,discipline,near,rec=null) {
+    const col=rec?fromColumn(state.model.sectors,rec.sectorText,'de setor emissor'):null; if(col) return col;
     const series=rec?codeSeriesKey(rec.code):'', sp=series?state.model.seriesSectorProfiles.get(series):null; if(sp&&sp.total>=4&&sp.share>=0.80)return {value:sp.value,quality:98,evidence:`A série ${series} usa o setor ${sp.value} em ${Math.round(sp.share*100)}% de ${sp.total} referências`};
     let p=state.model.typeDiscSectorProfiles.get(`${type}|${discipline}`); if(p&&p.total>=3&&p.share>=0.68)return {value:p.value,quality:94,evidence:`Mesmo tipo + disciplina usam ${p.value} em ${Math.round(p.share*100)}% de ${p.total} referências`};
     p=state.model.typeSectorProfiles.get(type); if(p&&p.total>=4&&p.share>=0.78)return {value:p.value,quality:89,evidence:`Tipo ${type} usa ${p.value} em ${Math.round(p.share*100)}% de ${p.total} referências`};
@@ -612,6 +676,7 @@
     return {value:'',quality:0,evidence:'Setor emissor sem evidência suficiente'};
   }
   function chooseFront(type,sector,discipline,near,rec=null) {
+    const col=rec?fromColumn(state.model.fronts,rec.frontText,'de frente'):null; if(col) return col;
     const series=rec?codeSeriesKey(rec.code):'', sp=series?state.model.seriesFrontProfiles.get(series):null; if(sp&&sp.total>=4&&sp.share>=0.90)return {value:sp.value,quality:98,evidence:`A série ${series} usa a frente ${sp.value} em ${Math.round(sp.share*100)}% de ${sp.total} referências`};
     const p=state.model.comboFrontProfiles.get(`${type}|${sector}|${discipline}`); if(p&&p.total>=2&&p.share>=0.80)return {value:p.value,quality:92,evidence:`Frente predominante para o mesmo tipo/setor/disciplina (${Math.round(p.share*100)}%)`};
     const v=voteWithDominance(near,'front'); if(v.value&&v.share>=0.82)return {value:v.value,quality:82,evidence:`Frente indicada pelas referências mais equivalentes (${Math.round(v.share*100)}%)`};
@@ -668,9 +733,16 @@
     const sector=chooseSector(type.value,discipline.value,near,rec); if(!sector.value)return {taxonomy:'',confidence:Math.min(type.quality,discipline.quality,55),criterion:`Classificação interrompida para evitar setor incorreto. ${sector.evidence}.`,mode:'none',details:null,baseValidation:'Revisão obrigatória: setor emissor não fechou com segurança.'};
     const front=chooseFront(type.value,sector.value,discipline.value,near,rec); if(!front.value)return {taxonomy:'',confidence:58,criterion:'Classificação interrompida: frente/fase não pôde ser definida com segurança.',mode:'none',details:null,baseValidation:'Revisão obrigatória: frente/fase.'};
 
-    const project=state.model.globalProject.share>=0.95?state.model.globalProject.value:(state.data.defaultProject||'');
-    const stage=state.model.globalStage.share>=0.95?state.model.globalStage.value:(state.data.defaultStage||'');
-    const language=state.model.globalLanguage.share>=0.95?state.model.globalLanguage.value:(state.data.defaultLanguage||'');
+    /* Obra, etapa e idioma vinham exclusivamente do consenso global das
+       referências: a linha da LD não era consultada nem quando trazia a
+       coluna correspondente. Agora a coluna rotulada, quando resolve contra
+       o catálogo oficial, tem precedência sobre o consenso. */
+    const projCol=fromColumn(state.model.projects,rec.projectText,'de obra');
+    const stageCol=fromColumn(state.model.stages,rec.stageText,'de etapa');
+    const langCol=fromColumn(state.model.languages,rec.languageText,'de idioma');
+    const project=projCol?projCol.value:(state.model.globalProject.share>=0.95?state.model.globalProject.value:(state.data.defaultProject||''));
+    const stage=stageCol?stageCol.value:(state.model.globalStage.share>=0.95?state.model.globalStage.value:(state.data.defaultStage||''));
+    const language=langCol?langCol.value:(state.model.globalLanguage.share>=0.95?state.model.globalLanguage.value:(state.data.defaultLanguage||''));
     if(!project||!stage||!language)return {taxonomy:'',confidence:55,criterion:'Base de referência não apresentou consenso suficiente para obra, etapa ou idioma.',mode:'none',details:null,baseValidation:'Revisão obrigatória.'};
 
     const prefix=[project,type.value,sector.value,stage,front.value,discipline.value,language].join('-');
@@ -678,7 +750,7 @@
     if(!seq) return {taxonomy:'',confidence:0,criterion:`O prefixo ${prefix} já utiliza os ${SEQ_MAX} sequenciais previstos no padrão de 4 dígitos. Um novo número duplicaria um documento existente, por isso a sugestão automática foi interrompida.`,mode:'none',details:null,baseValidation:'Revisão obrigatória: limite de sequenciais do prefixo atingido.',requiresReview:true,seqExhausted:prefix};
     const taxonomy=`${prefix}-${seq}`;
     const matrix=sectorAllowedByOfficialMatrix(type.value,sector.value);
-    const fieldEvidence={project:`${Math.round(state.model.globalProject.share*100)}% das taxonomias de referência usam ${project}.`,type:type.evidence,sector:sector.evidence,stage:`${Math.round(state.model.globalStage.share*100)}% das referências usam ${stage}.`,front:front.evidence,discipline:discipline.evidence,language:`${Math.round(state.model.globalLanguage.share*100)}% das referências usam ${language}.`,sequence:'Próximo sequencial após o maior número já utilizado neste prefixo; números existentes não são reutilizados.'};
+    const fieldEvidence={project:projCol?projCol.evidence:`${Math.round(state.model.globalProject.share*100)}% das taxonomias de referência usam ${project}.`,type:type.evidence,sector:sector.evidence,stage:stageCol?stageCol.evidence:`${Math.round(state.model.globalStage.share*100)}% das referências usam ${stage}.`,front:front.evidence,discipline:discipline.evidence,language:langCol?langCol.evidence:`${Math.round(state.model.globalLanguage.share*100)}% das referências usam ${language}.`,sequence:'Próximo sequencial após o maior número já utilizado neste prefixo; números existentes não são reutilizados.'};
     let confidence=Math.round(type.quality*0.31+sector.quality*0.24+discipline.quality*0.27+front.quality*0.08+9.5);confidence=Math.max(60,Math.min(96,confidence));
     let validation='Compatibilidade baseada na estrutura oficial e nas taxonomias já validadas das LDs.';
     let requiresReview=!!type.requiresReview;
@@ -1106,7 +1178,7 @@
           input:raw, code:rec.code, found:true, title:rec.title||'', disciplineText:rec.disciplineText||'', current,
           taxonomy:inf.taxonomy, confidence:inf.confidence, criterion:criterionPrefix+inf.criterion, mode:inf.mode, status, details:inf.details||null, baseValidation:inf.baseValidation||'', requiresReview:!!inf.requiresReview,
           emptyCount:emptyLoaded.length, invalidCount:invalidLoaded.length,
-          matches:loadedMatches, seqExhausted:inf.seqExhausted||'', origin:loadedMatches.length?`${new Set(loadedMatches.map(r=>r.sourceLD)).size} LD(s) carregada(s)`:`${rec.sourceLD||'Referência'} · ${rec.sheet||''}`,
+          matches:loadedMatches, seqExhausted:inf.seqExhausted||'', fields:rec.fields||null, origin:loadedMatches.length?`${new Set(loadedMatches.map(r=>r.sourceLD)).size} LD(s) carregada(s)`:`${rec.sourceLD||'Referência'} · ${rec.sheet||''}`,
           selected:loadedMatches.length>0 && emptyLoaded.length>0 && validTax(inf.taxonomy) && !currentDiff && !inf.requiresReview,
           writable:loadedMatches.length>0
         });
@@ -1182,6 +1254,7 @@
         selected:!!r.selected, writable:!!r.writable, emptyCount:r.emptyCount||0,
         invalidCount:r.invalidCount||0, requiresReview:!!r.requiresReview,
         matches:(r.matches||[]).length, details:r.details||null, baseValidation:r.baseValidation||'',
+        fields:r.fields||null,
         // Índice de busca pré-calculado: evita ler textContent de cada <tr>
         // a cada tecla digitada no campo de pesquisa.
         search:`${r.code} ${r.title||''} ${r.disciplineText||''} ${r.taxonomy||''} ${r.current||''} ${r.status||''} ${r.origin||''}`.toLowerCase()

@@ -204,3 +204,65 @@ análise, para que o código exato não pudesse ser reconhecido):
 A maior fonte de erro remanescente é o **perfil da série do código** (25 dos 47
 erros de disciplina): ele agrupa documentos que só diferem no sequencial e fica
 confiante demais quando a série mistura disciplinas.
+
+
+## v1.3.4 — a linha inteira da LD forma a taxonomia
+
+### Bug corrigido: SETOR lido como DISCIPLINA
+
+`DISCIPLINA` e `SETOR` são segmentos **diferentes** da taxonomia (6º e 3º), mas
+viviam na mesma lista de cabeçalhos e a primeira coluna encontrada vencia. Numa
+LD com as duas colunas, o setor era lido como disciplina e a coluna de
+disciplina era ignorada por completo:
+
+| linha | DISCIPLINA na LD | disciplina gerada | |
+|---|---|---|---|
+| 401 | TUBULACAO | `QUA` (veio de SETOR) | ✗ |
+| 402 | ELETRICA | `COM` | ✗ |
+| 403 | CIVIL | `PLA` | ✗ |
+
+As três erradas, com **94% de confiança** — ou seja, marcadas para gravação
+automática na LD.
+
+### A linha inteira passa a ser preservada
+
+A importação guardava 4 colunas e descartava o resto. Agora toda coluna com
+cabeçalho é preservada, e as colunas rotuladas de **SETOR**, **FRENTE**,
+**ETAPA/FASE**, **OBRA** e **IDIOMA** alimentam os segmentos correspondentes,
+resolvidas contra o catálogo oficial.
+
+Obra, etapa e idioma vinham **exclusivamente** do consenso global das
+referências — a linha não era consultada nem quando trazia a coluna.
+
+Mesma LD, antes e depois:
+
+| linha | antes | depois |
+|---|---|---|
+| 401 | `RHDD-LIS-COS-EX-GERA-QUA-PT` | `CONSAG-LIS-QTM-PB-ALMO-TUB-PT` |
+| 402 | `RHDD-LIS-COS-EX-GERA-COM-PT` | `GNA2-LIS-COS-PP-ADUT-ELE-EN` |
+| 403 | `RHDD-LIS-COS-EX-GERA-PLA-PT` | `NOAR-LIS-PLA-PO-ALOJ-CIV-ES` |
+
+O modal de evidências mostra os dados lidos da linha e, em cada segmento, de
+qual coluna a informação veio.
+
+### O que deliberadamente NÃO foi feito
+
+Inferir **frente, etapa ou obra a partir do título livre**. Medido sobre os
+3.106 exemplos com taxonomia validada:
+
+| segmento | dispara em | acerto |
+|---|---|---|
+| frente | 150 de 3.106 | **42,0%** |
+| obra | 3 de 3.106 | **0,0%** |
+| etapa | nunca | — |
+
+O título não carrega essa informação de forma confiável; ligá-la injetaria erro
+com aparência de evidência. Só colunas **explicitamente rotuladas** alimentam
+esses segmentos, e com exigência de correspondência exata ou quase (≥0,90)
+contra o catálogo oficial.
+
+### Sem regressão
+
+LDs sem as colunas novas se comportam exatamente como antes: N-1710
+(627 retidos) e ET (19.013 documentos) com resultado idêntico, suíte 57/57,
+e +1 MB de heap numa LD de 17 mil linhas.
