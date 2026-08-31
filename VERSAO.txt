@@ -1,3 +1,26 @@
+Taxonomia Consag v1.3.3
+29/08/2026
+
+Precisao para as duas familias de documento das LDs.
+
+- Aba ET (LD 003/004/005, 19.013 documentos): cobertura de sugestao
+  automatica de 26,5% -> 88,4%.
+  O tipo e a disciplina estao declarados no proprio codigo
+  (C1O_RNEST_U32_3.1.1.1_CVL_RIR_...) e o motor os ignorava, inferindo
+  por semelhanca de titulo. Agora o token de tipo e validado contra o
+  catalogo oficial e corroborado pelo titulo; a disciplina sai do token
+  ou da coluna de disciplina da LD.
+- Setor emissor: a aba "TIPO DE DOCUMENTO POR SETOR" passa a ser
+  consultada. Quando ela admite um unico setor para o tipo, o setor esta
+  determinado pela base. Falhas de setor nas ET: 2.577 -> 0.
+- Tokens sem equivalente no catalogo (EST = estaticos, DIN = dinamicos)
+  vao para revisao manual em vez de receber palpite. Sem isso, 374
+  documentos recebiam disciplina errada, capturada da palavra "INSPECAO"
+  no titulo.
+- Aba N-1710: saida byte a byte identica a da versao anterior. Medido em
+  627 documentos retidos da base: 87,3% de prefixo correto, tipo 96,3%,
+  setor 95,5%, disciplina 92,2%.
+
 Taxonomia Consag v1.3.2
 28/08/2026
 

@@ -132,3 +132,75 @@ Nas LDs 03/04/05, cerca de 73% dos documentos voltam sem sugestão automática
 que se recusa a inferir tipo, disciplina ou setor sem evidência suficiente. Essas LDs
 não possuem nenhuma taxonomia própria e usam uma família de códigos distinta das LDs
 de referência que possuem taxonomia validada.
+
+
+## v1.3.3 — precisão por família de documento (abas ET e N-1710)
+
+As LDs usam duas famílias de código, uma por aba, e o motor tratava as duas do
+mesmo jeito: inferindo tipo e disciplina por semelhança de título, ignorando que
+**o próprio código já declara essa informação**.
+
+| aba | LDs | documentos | código |
+|---|---|---|---|
+| `ET` | 003, 004, 005 | 19.013 | `C1O_RNEST_U32_3.1.1.1_CVL_RIR_B-32014A` |
+| `N-1710` | 001, 002 | 3.726 | `CR-5290.00-22313-911-C1O-001` |
+
+### Aba ET — cobertura de 26,5% para 88,4%
+
+| | antes | depois |
+|---|---|---|
+| com sugestão automática | 5.036 (26,5%) | **16.817 (88,4%)** |
+| falha de tipo | 11.223 | 1.836 |
+| falha de setor | 2.577 | **0** |
+
+Três mudanças, todas ancoradas na base oficial:
+
+1. **Tipo pelo código.** 90,3% dos tokens de tipo das LDs ET são códigos válidos
+   do catálogo oficial (`RIR` = RELATÓRIO DE INSPEÇÃO NO RECEBIMENTO). A
+   confiança acompanha a corroboração do título: 99,7% dos casos têm o título
+   confirmando a descrição oficial; quando não confirma, o documento é proposto
+   com confiança baixa e marcado para revisão, não afirmado.
+2. **Disciplina pelo código.** `TUB`, `INS`, `ELE`, `TEL` são códigos do catálogo;
+   `CVL` e `HVAC` resolvem para `CIV` e `HVA` pelos apelidos oficiais.
+3. **Setor pela matriz oficial.** A aba `TIPO DE DOCUMENTO POR SETOR` passa a ser
+   consultada: quando admite um único setor para o tipo (245 dos 327 tipos), o
+   setor está determinado pela base, não inferido. `RIR` → `QUALIDADE` → `QTM`.
+
+### O que deliberadamente NÃO foi feito
+
+Os tokens `EST` (estáticos, 583 docs) e `DIN` (dinâmicos, 112) não têm
+equivalente no catálogo — que separa estrutura por material (`MET`, `COC`,
+`MAD`, `PMO`). Eles vão para **revisão manual**.
+
+Isso não é omissão: numa versão intermediária esses 374 documentos recebiam
+disciplina `INP` (INSPEÇÃO), capturada da palavra "INSPEÇÃO" **no título** do
+relatório — não da disciplina real do equipamento. Taxonomia errada gravada na
+LD é pior que ausência de sugestão, então a inferência por título foi bloqueada
+quando o código declara uma disciplina que a base não reconhece.
+
+Os 1.836 documentos que ainda falham no tipo (`REP`, `RUFF`, `PPT`…) usam tipos
+que **não existem** no catálogo oficial. Só uma atualização da base CONSAG
+resolve.
+
+### Aba N-1710 — inalterada e verificada
+
+A saída é **byte a byte idêntica** à da versão anterior. Uma tentativa de usar
+`prefixo|disciplina` do código como evidência foi medida, **não apresentou ganho**
+e alterava o desempate código-vs-título sem gabarito que a validasse — foi
+removida.
+
+Precisão medida em 627 documentos retidos da base (removidos do modelo antes da
+análise, para que o código exato não pudesse ser reconhecido):
+
+| segmento | acerto |
+|---|---|
+| prefixo completo (7 segmentos) | 87,3% |
+| tipo | 96,3% |
+| setor | 95,5% |
+| disciplina | 92,2% |
+| frente | 97,8% |
+| obra / etapa / idioma | 100,0% |
+
+A maior fonte de erro remanescente é o **perfil da série do código** (25 dos 47
+erros de disciplina): ele agrupa documentos que só diferem no sequencial e fica
+confiante demais quando a série mistura disciplinas.
