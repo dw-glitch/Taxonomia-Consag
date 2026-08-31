@@ -510,13 +510,25 @@
       <div class="ev-section">
         <div class="ev-section-title">Detalhamento por Segmento</div>
         <div class="ev-table-wrap">
-          <table class="ev-table">
+          <table class="ev-table ev-table--segments">
             <thead><tr><th>#</th><th>Campo</th><th>Código</th><th>Significado</th></tr></thead>
             <tbody>${segs.map((sg, i) => `<tr>
               <td><span class="ev-pill">${i + 1}</span></td>
               <td class="ev-td-field">${esc(sg.label)}</td>
               <td><span class="ev-code">${esc(sg.value)}</span></td>
               <td>${esc(sg.meaning)}${sg.evidence ? `<span class="ev-evidence">${esc(sg.evidence)}</span>` : ''}</td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </div>` : ''}
+      ${r.fields && Object.keys(r.fields).length ? `
+      <div class="ev-section">
+        <div class="ev-section-title">Dados lidos da linha da LD</div>
+        <div class="ev-table-wrap">
+          <table class="ev-table ev-table--fields">
+            <thead><tr><th>Coluna</th><th>Valor</th></tr></thead>
+            <tbody>${Object.entries(r.fields).map(([k,v])=>`<tr>
+              <td class="ev-td-field">${esc(k)}</td><td>${esc(v)}</td>
             </tr>`).join('')}</tbody>
           </table>
         </div>

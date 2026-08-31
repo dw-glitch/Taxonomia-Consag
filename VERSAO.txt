@@ -1,3 +1,29 @@
+Taxonomia Consag v1.3.4
+31/08/2026
+
+A linha inteira da LD passa a formar a taxonomia.
+
+- CORRECAO CRITICA: DISCIPLINA e SETOR viviam na mesma lista de cabecalhos
+  e a primeira coluna encontrada vencia. Numa LD com as duas colunas, o
+  SETOR era lido como disciplina e a coluna DISCIPLINA era ignorada. As
+  tres linhas de teste saiam com disciplina errada e 94% de confianca --
+  seriam gravadas na LD automaticamente.
+- A importacao preservava 4 colunas (taxonomia, codigo, titulo,
+  disciplina) e descartava o resto da linha. Agora toda coluna com
+  cabecalho e preservada e fica disponivel como evidencia.
+- Colunas rotuladas de SETOR, FRENTE, ETAPA/FASE, OBRA e IDIOMA passam a
+  alimentar os segmentos correspondentes, resolvidas contra o catalogo
+  oficial. Obra, etapa e idioma vinham exclusivamente do consenso global
+  das referencias: a linha nao era consultada nem quando trazia a coluna.
+- O modal de evidencias mostra os dados lidos da linha e, em cada
+  segmento, de qual coluna a informacao veio.
+- NAO foi feito: inferir frente/etapa/obra a partir do titulo livre.
+  Medido sobre os 3.106 exemplos: frente acerta 42%, obra 0% e etapa
+  nunca dispara. Apenas colunas explicitamente rotuladas alimentam esses
+  segmentos.
+- Sem regressao: N-1710 (627 retidos) e ET (19.013) com resultado
+  identico; suite 57/57; +1MB de heap numa LD de 17 mil linhas.
+
 Taxonomia Consag v1.3.3
 29/08/2026
 
